@@ -1,5 +1,20 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V49 valid-dry-field correction
+
+- A fully validated NOAA all-zero/dry field is now accepted when Open-Meteo also reports less than 0.005 inch over 72 hours.
+- If NOAA reports a dry field while Open-Meteo reports meaningful rainfall, the existing unavailable/fallback safeguards remain active.
+- This prevents legitimate dry locations such as Hueston Woods from being marked unavailable without allowing missing or conflicting wet-weather data to become green.
+- Rainfall retrieval, weighting, rideability, readiness, drying, overlays, trail cards, and trail data are unchanged from V48.
+
+V49 verification results:
+
+- Hueston Woods loaded from live NOAA MRMS as 0.00 inches over 72 hours, `Likely good`, and 100% rideability.
+- All 36 trail cards loaded; no unavailable or unverified rainfall card displayed green.
+- No browser warnings or errors occurred.
+- JavaScript syntax, NOAA request-contract tests, and live 12/24/48/72-hour checks at Columbus, Cleveland, and Cincinnati passed.
+- Live NOAA totals remained monotonic at all three test locations.
+
 ## V48 rainfall overlays
 
 - Adds separate 12-hour and 24-hour NOAA rainfall buttons to the map.

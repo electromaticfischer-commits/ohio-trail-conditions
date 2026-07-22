@@ -22,6 +22,12 @@ for (const source of sources) {
  if (!source.includes("valid NOAA radar data is being used as the primary source")) {
    throw new Error('NOAA-primary disagreement notice is missing');
  }
+ if (source.includes("if(mrmsAllZero(mrms))return")) {
+   throw new Error('A valid dry NOAA field is still rejected unconditionally');
+ }
+ if (!source.includes("mrmsAllZero(mrms)&&meaningfulRain(fallback)")) {
+   throw new Error('Dry NOAA fields are not guarded by the independent rainfall check');
+ }
 }
 if (app.includes("mrms_24h_co")) throw new Error('Obsolete overlay catalog selector remains');
 

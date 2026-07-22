@@ -339,8 +339,8 @@ function sourceDisagreement(mrms,openMeteo){
   if(Math.min(a,b)<MRMS_RAIN_EPSILON)return true;
   return Math.max(a,b)/Math.min(a,b)>MRMS_MAX_SOURCE_RATIO;
 }
-function describeMrmsProblem(mrms,cached){
-  if(mrmsAllZero(mrms))return 'NOAA returned an all-zero precipitation field.';
+function describeMrmsProblem(mrms,cached,fallback){
+  if(mrmsAllZero(mrms)&&meaningfulRain(fallback))return 'NOAA returned a dry field while the independent source reported meaningful rainfall.';
   if(rainfallOrderingInvalid(mrms))return 'NOAA rolling totals were internally inconsistent (12/24/48/72-hour ordering failed).';
   if(abruptMrmsDrop(mrms,cached))return 'NOAA rainfall dropped implausibly compared with the last trustworthy reading.';
   return '';
@@ -524,7 +524,7 @@ async function fetchTrail(t){
   try{
     const mrmsRainfall=await fetchMrmsRain(trailWeatherLat(t),trailWeatherLon(t));
     rainDiagnostics={...mrmsRainfall.diagnostics,historicalFallback:historicalAvailable?'available':('unavailable'+(historicalError?': '+historicalError:''))};
-    const problem=describeMrmsProblem(mrmsRainfall,cached);
+    const problem=describeMrmsProblem(mrmsRainfall,cached,fallback);
     const comparisonWarning=sourceDisagreement(mrmsRainfall,fallback);
 
     if(!problem){
