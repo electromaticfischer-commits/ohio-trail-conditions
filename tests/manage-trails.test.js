@@ -1,0 +1,37 @@
+(async()=>{
+  const results=[];
+  const test=(name,fn)=>{try{fn();results.push({name,ok:true})}catch(error){results.push({name,ok:false,error:String(error.message||error)})}};
+  const assert=(condition,message)=>{if(!condition)throw new Error(message)};
+  localStorage.clear();
+  const api=window.OTC_TEST_API;
+  const alum=api.baseTrails.find(t=>t.id==='alum-p1');
+  api.populateTrailForm(alum);
+  test('existing trail name prepopulates',()=>assert(document.getElementById('trailName').value===alum.name,'name missing'));
+  test('coordinates prepopulate',()=>assert(Number(document.getElementById('lat').value)===alum.lat && Number(document.getElementById('lon').value)===alum.lon,'coordinates missing'));
+  test('model fields map to descriptive options',()=>assert(document.getElementById('sensitivity').selectedOptions[0].textContent && !document.getElementById('sensitivity').selectedOptions[0].textContent.includes('existing setting'),'numeric placeholder shown'));
+  test('official URL prepopulates',()=>assert(document.getElementById('officialUrl').value===alum.official,'official URL missing'));
+  document.querySelector('#surfaceChecks input[value="Clay-heavy natural soil"]').checked=true;
+  document.getElementById('drainage').value='Poor';
+  const expectedName=document.getElementById('trailName').value;
+  const originalFetch=window.fetch;
+  window.fetch=async url=>{
+    const s=String(url);
+    if(s.includes('open-meteo.com')) return {ok:true,json:async()=>({hourly:{time:[new Date().toISOString()],temperature_2m:[70],relative_humidity_2m:[55],precipitation:[0],cloud_cover:[20],wind_speed_10m:[6]}})};
+    if(s.includes('getSamples')) return {ok:true,json:async()=>({samples:Array.from({length:25},()=>({value:0}))})};
+    return {ok:true,json:async()=>({})};
+  };
+  await api.saveTrail({preventDefault(){}});
+  window.fetch=originalFetch;
+  const state=api.getState();
+  test('save preserves trail name',()=>assert(state.builtInOverrides['alum-p1'].name===expectedName,'name changed or emptied'));
+  test('surface persists',()=>assert(state.builtInOverrides['alum-p1'].surfaces.includes('Clay-heavy natural soil'),'surface missing'));
+  test('drainage persists',()=>assert(state.builtInOverrides['alum-p1'].drainage==='Poor','drainage missing'));
+  test('card updates after save',()=>{const card=document.getElementById('trail-card-alum-p1');assert(card && card.textContent.includes('Clay-heavy'),'card did not update')});
+  api.populateTrailForm(api.allManagedTrails().find(t=>t.id==='alum-p1'));
+  test('reopen retains saved surface',()=>assert(document.querySelector('#surfaceChecks input[value="Clay-heavy natural soil"]').checked,'surface not checked after reopen'));
+  test('reopen retains name',()=>assert(document.getElementById('trailName').value===expectedName,'name not retained after reopen'));
+  const failed=results.filter(r=>!r.ok);
+  document.body.innerHTML='<main style="padding:24px"><h1>Manage Trails regression tests</h1>'+results.map(r=>`<p>${r.ok?'✅':'❌'} ${r.name}${r.error?`: ${r.error}`:''}</p>`).join('')+'</main>';
+  document.title=failed.length?`FAIL ${failed.length}`:`PASS ${results.length}`;
+  document.documentElement.dataset.testStatus=failed.length?'fail':'pass';
+})();
