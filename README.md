@@ -1,28 +1,70 @@
-# Ohio Trail Conditions V41
+# Ohio Trail Conditions NOAA Repair Build
 
-## NOAA query correction
+## V48 rainfall overlays
 
-V41 makes one focused change to V40's NOAA request layer:
+- Adds separate 12-hour and 24-hour NOAA rainfall buttons to the map.
+- Each overlay queries the live catalog and locks `exportImage` to the current `conus_QPE_12H` or `conus_QPE_24H` raster ID.
+- Uses NOAA's matching `rft_12hr` or `rft_24hr` renderer.
+- Selecting the active period again hides the overlay; selecting the other period switches the map image.
+- Point rainfall retrieval, rainfall weighting, rideability, readiness, drying, trail cards, and trail data are unchanged from V47.
 
-- MRMS `getSamples` requests now filter the raster catalog using NOAA's documented **GIS Subset** field (`idp_subset`), such as `mrms_12h_co` and `mrms_72h_co`.
-- The unsupported `renderingRule` parameter was removed from `getSamples`. The NOAA service form and ArcGIS endpoint contract list `mosaicRule` for `getSamples`, but do not list `renderingRule`; including it caused the API response “Invalid or missing input parameters.”
-- The 24-hour map overlay still uses both a CONUS mosaic filter and the 24-hour renderer because `exportImage` supports both parameters.
+V48 overlay test results:
+
+- Direct NOAA 12-hour image: HTTP 200, PNG, 800×640; nearly transparent because the current 12-hour field is essentially dry.
+- Direct NOAA 24-hour image: HTTP 200, PNG, 800×640; colored rainfall pixels present across Ohio.
+- Browser 12-hour overlay: loaded 609×518 from the current locked `conus_QPE_12H` raster.
+- Browser 24-hour overlay: loaded 609×518 from the current locked `conus_QPE_24H` raster.
+- Switching periods correctly deactivated 12 hours and activated 24 hours.
+- All 36 trail cards loaded; 35 used live NOAA point rainfall; no browser warnings or errors occurred; unverified rainfall did not produce a green condition.
+
+## V47 data-selection change
+
+- Valid, internally consistent NOAA MRMS rainfall is now the primary source even when Open-Meteo reports a substantially different storm total.
+- Source disagreement remains visible as a warning and in Developer Mode, but no longer replaces valid NOAA data with cached NOAA or Open-Meteo data.
+- NOAA's normal hourly update can briefly leave products one hour apart; that one-hour skew is accepted, while larger timestamp differences are rejected.
+- NOAA errors, missing samples, invalid numeric values, inconsistent rolling totals, and implausible drops still trigger the existing safeguards and fallbacks.
+- Rainfall weighting, rideability, readiness, drying, trail data, and map behavior are unchanged from V46.
+
+V47 browser regression results:
+
+- All 36 trail cards loaded with no browser errors.
+- 33 cards used live NOAA MRMS data; none used the cached-NOAA workaround.
+- 15 NOAA/Open-Meteo disagreements displayed a warning while retaining NOAA.
+- One trail remained unavailable through the pre-existing safety checks.
+- No trail with unverified rainfall displayed a green condition.
+- Baileys displayed NOAA's 1.48-inch total as Marginal, 45% rideability, and approximately 11 hours until ready.
+
+## NOAA point-rainfall correction
+
+This build starts from V41 and makes one focused change to NOAA point-rainfall retrieval:
+
+- Queries NOAA's current catalog for `conus_QPE_12H`, `conus_QPE_24H`, `conus_QPE_48H`, and `conus_QPE_72H`.
+- Locks each 25-point `getSamples` request to the exact live raster object ID returned by that catalog query.
+- Verifies that all four products share the same valid timestamp, all 25 samples return, and every sample came from the selected raster.
+- Preserves the existing millimeter-to-inch conversion at the raw pixel boundary. A live Columbus check returned 17.1 mm (0.673 in) for 48/72 hours, closely matching an independent 0.681-inch Open-Meteo total.
+- The map overlay is intentionally unchanged.
 - Rainfall scoring, readiness math, fallback handling, trail data, map behavior, and card layout were not intentionally changed.
 
 ## Test report
 
-Baseline: V40.
+Baseline: V41.
 
 Automated checks completed:
 
 - JavaScript syntax check for `js/app.js`.
 - JavaScript syntax check for the inline application script in `index.html`.
-- Static endpoint-contract regression test confirming:
-  - `idp_subset` is used instead of `name`;
-  - `getSamples` contains no `renderingRule`;
-  - the map overlay retains its supported renderer.
+- Static endpoint-contract regression tests for exact NOAA product names, catalog lookup, raster-ID locking, and absence of the obsolete point-sampling selector.
 - Rain safeguard regression checklist remains included.
 
-Not verified in the build environment:
+Live results at NOAA valid time `2026-07-22T20:00:00Z` (25 samples per period):
 
-- A live browser call to NOAA. The execution container cannot resolve external DNS. Developer diagnostics remain enabled so the live response, URL, sample count, and any API error can be inspected immediately in the browser.
+- Columbus: 12h 0.000, 24h 0.138, 48h 0.772, 72h 0.772 inches.
+- Cleveland: 12h 0.000, 24h 0.071, 48h 0.969, 72h 0.969 inches.
+- Cincinnati: 12h 0.000, 24h 0.000, 48h 0.874, 72h 0.874 inches.
+- All live requests returned HTTP success with no hidden error object, numeric samples, the expected locked raster ID, and monotonic rolling totals.
+- Browser load: all 36 trail cards rendered; NOAA data was accepted where it passed the existing safeguards; no browser errors occurred; missing/untrusted rainfall did not produce a green card.
+- V41 CSS and trail data matched byte-for-byte after the repair.
+
+Not verified:
+
+- The map overlay was intentionally not tested or changed in this point-data repair.

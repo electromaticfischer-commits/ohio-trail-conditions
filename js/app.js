@@ -28,9 +28,10 @@ function catalog(){return allManagedTrails().filter(t=>!hiddenTrailIds.includes(
 const map=L.map('map').setView([40.05,-82.75],7);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 let precipitationOverlay=null;
-let precipitationEnabled=false;
+let precipitationPeriod=null;
+let precipitationRequestId=0;
 const PRECIP_IMAGE_URL='https://mapservices.weather.noaa.gov/raster/rest/services/obs/mrms_qpe/ImageServer/exportImage';
-function precipitationImageUrl(bounds){
+function precipitationImageUrl(bounds,hours,product){
   const size=map.getSize();
   const params=new URLSearchParams({
     f:'image',
@@ -41,42 +42,59 @@ function precipitationImageUrl(bounds){
     format:'png32',
     transparent:'true',
     interpolation:'RSP_BilinearInterpolation',
-    mosaicRule:JSON.stringify({mosaicMethod:'esriMosaicAttribute',where:"idp_subset = 'mrms_24h_co'",sortField:'idp_subset',sortValue:'mrms_24h_co',ascending:true}),
-    renderingRule:JSON.stringify({rasterFunction:'rft_24hr'})
+    mosaicRule:JSON.stringify({mosaicMethod:'esriMosaicLockRaster',lockRasterIds:[product.objectId]}),
+    renderingRule:JSON.stringify({rasterFunction:`rft_${hours}hr`})
   });
   return `${PRECIP_IMAGE_URL}?${params.toString()}`;
 }
-function refreshPrecipitationOverlay(){
-  if(!precipitationEnabled)return;
+async function refreshPrecipitationOverlay(){
+  if(!precipitationPeriod)return;
+  const requestedPeriod=precipitationPeriod;
+  const requestId=++precipitationRequestId;
   const bounds=map.getBounds();
-  const url=precipitationImageUrl(bounds);
-  if(precipitationOverlay)map.removeLayer(precipitationOverlay);
-  precipitationOverlay=L.imageOverlay(url,bounds,{opacity:.58,interactive:false,zIndex:250,errorOverlayUrl:''}).addTo(map);
+  try{
+    const products=await fetchMrmsCatalog();
+    if(requestId!==precipitationRequestId||requestedPeriod!==precipitationPeriod)return;
+    const url=precipitationImageUrl(bounds,requestedPeriod,products[requestedPeriod]);
+    if(precipitationOverlay)map.removeLayer(precipitationOverlay);
+    precipitationOverlay=L.imageOverlay(url,bounds,{opacity:.58,interactive:false,zIndex:250,errorOverlayUrl:''}).addTo(map);
+    precipitationOverlay.on('error',()=>console.warn(`NOAA ${requestedPeriod}-hour rainfall overlay image failed to load`));
+  }catch(error){console.warn(`NOAA ${requestedPeriod}-hour rainfall overlay unavailable`,error)}
 }
 const PrecipControl=L.Control.extend({
   options:{position:'topright'},
   onAdd(){
     const box=L.DomUtil.create('div','leaflet-bar');
-    const button=L.DomUtil.create('button','',box);
-    button.type='button';
-    button.title='Show or hide NOAA 24-hour precipitation';
-    button.setAttribute('aria-pressed','false');
-    button.style.cssText='background:#fff;padding:8px 10px;border:0;border-radius:4px;font:700 12px system-ui;cursor:pointer;';
-    button.textContent='24h rain';
+    box.style.cssText='display:flex;background:#fff;border-radius:4px;overflow:hidden;';
+    const buttons={};
     L.DomEvent.disableClickPropagation(box);
-    L.DomEvent.on(button,'click',()=>{
-      precipitationEnabled=!precipitationEnabled;
-      button.setAttribute('aria-pressed',String(precipitationEnabled));
-      button.style.background=precipitationEnabled?'#173f2a':'#fff';
-      button.style.color=precipitationEnabled?'#fff':'#172019';
-      if(precipitationEnabled)refreshPrecipitationOverlay();
-      else if(precipitationOverlay){map.removeLayer(precipitationOverlay);precipitationOverlay=null;}
+    const updateButtons=()=>[12,24].forEach(hours=>{
+      const active=precipitationPeriod===hours;
+      buttons[hours].setAttribute('aria-pressed',String(active));
+      buttons[hours].style.background=active?'#173f2a':'#fff';
+      buttons[hours].style.color=active?'#fff':'#172019';
+    });
+    [12,24].forEach((hours,index)=>{
+      const button=L.DomUtil.create('button','',box);
+      buttons[hours]=button;
+      button.type='button';
+      button.title=`Show or hide NOAA ${hours}-hour precipitation`;
+      button.setAttribute('aria-pressed','false');
+      button.style.cssText=`background:#fff;padding:8px 10px;border:0;${index?'border-left:1px solid #d6ddd8;':''}font:700 12px system-ui;cursor:pointer;`;
+      button.textContent=`${hours}h rain`;
+      L.DomEvent.on(button,'click',()=>{
+        precipitationPeriod=precipitationPeriod===hours?null:hours;
+        precipitationRequestId++;
+        updateButtons();
+        if(precipitationPeriod)refreshPrecipitationOverlay();
+        else if(precipitationOverlay){map.removeLayer(precipitationOverlay);precipitationOverlay=null;}
+      });
     });
     return box;
   }
 });
 map.addControl(new PrecipControl());
-map.on('moveend zoomend',()=>{if(precipitationEnabled)refreshPrecipitationOverlay()});
+map.on('moveend zoomend',()=>{if(precipitationPeriod)refreshPrecipitationOverlay()});
 setTimeout(()=>map.invalidateSize(),250);window.addEventListener('resize',()=>map.invalidateSize());
 function trailWeatherLat(t){const n=Number(t.weatherLat);return Number.isFinite(n)?n:Number(t.lat)}
 function trailWeatherLon(t){const n=Number(t.weatherLon);return Number.isFinite(n)?n:Number(t.lon)}
@@ -174,7 +192,12 @@ function reopenReport(id){
   if(panel&&btn){panel.classList.add('open');btn.setAttribute('aria-expanded','true')}
  })
 }
-const MRMS_URL='https://mapservices.weather.noaa.gov/raster/rest/services/obs/mrms_qpe/ImageServer/getSamples';
+const MRMS_SERVICE_URL='https://mapservices.weather.noaa.gov/raster/rest/services/obs/mrms_qpe/ImageServer';
+const MRMS_URL=MRMS_SERVICE_URL+'/getSamples';
+const MRMS_CATALOG_URL=MRMS_SERVICE_URL+'/query';
+const MRMS_PRODUCTS={12:'conus_QPE_12H',24:'conus_QPE_24H',48:'conus_QPE_48H',72:'conus_QPE_72H'};
+const MRMS_CATALOG_CACHE_MS=5*60*1000;
+let mrmsCatalogCache=null;
 const RAIN_INNER_RADIUS_MILES=2;
 const RAIN_OUTER_RADIUS_MILES=5;
 
@@ -217,11 +240,10 @@ function sourceDisagreement(mrms,openMeteo){
   if(Math.min(a,b)<MRMS_RAIN_EPSILON)return true;
   return Math.max(a,b)/Math.min(a,b)>MRMS_MAX_SOURCE_RATIO;
 }
-function describeMrmsProblem(mrms,cached,fallback){
+function describeMrmsProblem(mrms,cached){
   if(mrmsAllZero(mrms))return 'NOAA returned an all-zero precipitation field.';
   if(rainfallOrderingInvalid(mrms))return 'NOAA rolling totals were internally inconsistent (12/24/48/72-hour ordering failed).';
   if(abruptMrmsDrop(mrms,cached))return 'NOAA rainfall dropped implausibly compared with the last trustworthy reading.';
-  if(sourceDisagreement(mrms,fallback))return 'NOAA and Open-Meteo disagreed substantially about the recent storm total.';
   return '';
 }
 
@@ -277,7 +299,32 @@ function rainStats(values,weights){
     rawMin:Math.min(...rawValues), rawMax:Math.max(...rawValues), rawPreview:rawValues.slice(0,8)
   };
 }
-async function fetchMrmsPeriod(lat,lon,hours){
+async function fetchMrmsCatalog(){
+  if(mrmsCatalogCache&&Date.now()-mrmsCatalogCache.savedAt<MRMS_CATALOG_CACHE_MS)return mrmsCatalogCache.products;
+  const names=Object.values(MRMS_PRODUCTS);
+  const where=names.map(name=>`idp_subset = '${name}'`).join(' OR ');
+  const params=new URLSearchParams({
+    f:'json',where,outFields:'objectid,name,idp_subset,idp_filedate,idp_validendtime',returnGeometry:'false'
+  });
+  const response=await fetch(`${MRMS_CATALOG_URL}?${params.toString()}`);
+  if(!response.ok)throw new Error(`MRMS catalog request failed (HTTP ${response.status})`);
+  const data=await response.json();
+  if(data.error)throw new Error(data.error.message||'MRMS catalog service error');
+  const features=Array.isArray(data.features)?data.features:[];
+  const products={};
+  for(const hours of Object.keys(MRMS_PRODUCTS).map(Number)){
+    const expected=MRMS_PRODUCTS[hours];
+    const matches=features.map(feature=>feature?.attributes||{}).filter(item=>item.idp_subset===expected&&Number.isInteger(Number(item.objectid)));
+    if(matches.length!==1)throw new Error(`MRMS catalog did not return exactly one ${expected} raster`);
+    const item=matches[0];
+    products[hours]={hours,objectId:Number(item.objectid),name:item.name,idpSubset:item.idp_subset,fileDate:Number(item.idp_filedate),validEndTime:Number(item.idp_validendtime)};
+  }
+  const timestamps=Object.values(products).map(item=>item.validEndTime);
+  if(timestamps.some(value=>!Number.isFinite(value))||Math.max(...timestamps)-Math.min(...timestamps)>60*60*1000)throw new Error('MRMS catalog product timestamps differ by more than one hour');
+  mrmsCatalogCache={savedAt:Date.now(),products};
+  return products;
+}
+async function fetchMrmsPeriod(lat,lon,hours,product){
   const samplePlan=rainfallSamplePoints(lat,lon);
   const geometry={points:samplePlan.points,spatialReference:{wkid:4326}};
   const params=new URLSearchParams({
@@ -286,7 +333,7 @@ async function fetchMrmsPeriod(lat,lon,hours){
     geometry:JSON.stringify(geometry),
     returnFirstValueOnly:'true',
     interpolation:'RSP_NearestNeighbor',
-    mosaicRule:JSON.stringify({mosaicMethod:'esriMosaicAttribute',where:`idp_subset = 'mrms_${hours}h_co'`,sortField:'idp_subset',sortValue:`mrms_${hours}h_co`,ascending:true})
+    mosaicRule:JSON.stringify({mosaicMethod:'esriMosaicLockRaster',lockRasterIds:[product.objectId]})
   });
   const requestUrl=`${MRMS_URL}?${params.toString()}`;
   const started=Date.now();
@@ -295,16 +342,19 @@ async function fetchMrmsPeriod(lat,lon,hours){
   const data=await response.json();
   if(data.error)throw new Error(data.error.message||'MRMS service error');
   const samples=Array.isArray(data.samples)?data.samples:[];
+  if(samples.length!==samplePlan.points.length)throw new Error(`MRMS ${hours} hr returned ${samples.length} of ${samplePlan.points.length} samples`);
+  if(samples.some(sample=>Number(sample?.rasterId)!==product.objectId))throw new Error(`MRMS ${hours} hr returned an unexpected raster`);
   const values=samples.map(sample=>sample?.value ?? sample?.values?.[0]);
   const sampleDetails=samplePlan.points.map((point,i)=>({
     lon:point[0],lat:point[1],weight:samplePlan.weights[i],raw:Number(values[i]),inches:validMrmsRainInches(values[i])
   }));
-  return {...rainStats(values,samplePlan.weights),hours,httpStatus:response.status,durationMs:Date.now()-started,requestUrl,returnedSamples:samples.length,sampleDetails,rawResponse:data};
+  return {...rainStats(values,samplePlan.weights),hours,httpStatus:response.status,durationMs:Date.now()-started,requestUrl,returnedSamples:samples.length,sampleDetails,rawResponse:data,rawUnit:'millimeters',finalUnit:'inches',raster:product};
 }
 
 async function fetchMrmsRain(lat,lon){
   const periods=[12,24,48,72];
-  const stats=await Promise.all(periods.map(h=>fetchMrmsPeriod(lat,lon,h)));
+  const products=await fetchMrmsCatalog();
+  const stats=await Promise.all(periods.map(h=>fetchMrmsPeriod(lat,lon,h,products[h])));
   const result={sampleRadius:RAIN_OUTER_RADIUS_MILES,sampleCount:stats[0]?.count||0,diagnostics:{ok:true,updatedAt:new Date().toISOString(),periods:stats}};
   periods.forEach((h,i)=>{
     result[`r${h}`]=stats[i].median; result[`r${h}Avg`]=stats[i].average; result[`r${h}Min`]=stats[i].min; result[`r${h}Max`]=stats[i].max;
@@ -377,11 +427,16 @@ async function fetchTrail(t){
   try{
     const mrmsRainfall=await fetchMrmsRain(trailWeatherLat(t),trailWeatherLon(t));
     rainDiagnostics={...mrmsRainfall.diagnostics,historicalFallback:historicalAvailable?'available':('unavailable'+(historicalError?': '+historicalError:''))};
-    const problem=describeMrmsProblem(mrmsRainfall,cached,fallback);
+    const problem=describeMrmsProblem(mrmsRainfall,cached);
+    const comparisonWarning=sourceDisagreement(mrmsRainfall,fallback);
 
     if(!problem){
       rainfall={...mrmsRainfall,lastRain:fallback.lastRain};
       rainSource='NOAA MRMS radar · distance-weighted 5-mile sampling';
+      if(comparisonWarning){
+        rainWarning='NOAA radar and Open-Meteo differ substantially; valid NOAA radar data is being used as the primary source. ';
+        rainDiagnostics={...rainDiagnostics,comparisonWarning:'Open-Meteo differs substantially; NOAA MRMS remains selected.',fallback:{r12:fallback.r12,r24:fallback.r24,r48:fallback.r48,r72:fallback.r72}};
+      }
       writeMrmsCache(t.id,rainfall);
     }else if(cached&&cacheAge<=MRMS_ZERO_HOLD_MS&&meaningfulRain(cached)){
       rainfall={...cached,lastRain:cached.lastRain||fallback.lastRain};
@@ -501,7 +556,8 @@ function rainfallDiagnosticsPanel(r){
   const diagClass=d.degraded?'diag-warning':'diag-ok';
   const diagText=d.degraded?'NOAA responded, but precipitation data was rejected':'NOAA MRMS data accepted';
   const safeguard=d.degraded?`<dt>Safeguard</dt><dd>${escapeHtml(d.degradedReason||'Suspicious all-zero precipitation field detected.')} ${d.safeguardSource?`Using ${escapeHtml(d.safeguardSource)}.`:''}</dd>`:'';
-  return `<details class="rain-diagnostics"><summary>Rainfall diagnostics</summary><div class="diag-status ${diagClass}">${diagText}</div><dl><dt>Weather coordinates</dt><dd>${coords}</dd><dt>Updated</dt><dd>${updated}</dd><dt>Conversion</dt><dd>Raw raster value ÷ 25.4 = inches</dd>${safeguard}<dt>Historical fallback</dt><dd>${escapeHtml(d.historicalFallback||'not checked')}</dd><dt>Developer mode</dt><dd>${developerMode?'On — expanded technical data is available below':'Off'}</dd></dl><div class="diag-table-wrap"><table><thead><tr><th>Period</th><th>HTTP</th><th>Samples</th><th>Raw range</th><th>Median used</th><th>Time</th></tr></thead><tbody>${rows}</tbody></table></div>${developerDetails(d)}</details>`;
+  const comparison=d.comparisonWarning?`<dt>Source comparison</dt><dd>${escapeHtml(d.comparisonWarning)}</dd>`:'';
+  return `<details class="rain-diagnostics"><summary>Rainfall diagnostics</summary><div class="diag-status ${diagClass}">${diagText}</div><dl><dt>Weather coordinates</dt><dd>${coords}</dd><dt>Updated</dt><dd>${updated}</dd><dt>Conversion</dt><dd>Raw raster value ÷ 25.4 = inches</dd>${safeguard}${comparison}<dt>Historical fallback</dt><dd>${escapeHtml(d.historicalFallback||'not checked')}</dd><dt>Developer mode</dt><dd>${developerMode?'On — expanded technical data is available below':'Off'}</dd></dl><div class="diag-table-wrap"><table><thead><tr><th>Period</th><th>HTTP</th><th>Samples</th><th>Raw range</th><th>Median used</th><th>Time</th></tr></thead><tbody>${rows}</tbody></table></div>${developerDetails(d)}</details>`;
 }
 
 function currentDistance(trail){
