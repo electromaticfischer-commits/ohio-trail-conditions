@@ -25,7 +25,8 @@ assert.strictEqual(
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert(!source.includes("'Rainfall sampled across a '"), 'Technical rainfall paragraph is still rendered on cards');
 assert(!source.includes("'. Weather center: '+"), 'Weather-center paragraph is still rendered on cards');
-assert(source.includes("r.weatherError||r.rainWarning"), 'Important card warnings must remain visible');
+assert(source.includes("'Humidity '+Math.round(r.humidity)+'%, wind '+Math.round(r.wind)+' mph.'"), 'Short humidity and wind line is missing');
+assert(source.includes("r.rainWarning||''"), 'Important card warnings must remain visible');
 assert.doesNotThrow(() => new Function(inline), 'Inline application script must have valid JavaScript syntax');
 
 console.log('Card-cleanup regression tests passed.');

@@ -1,5 +1,20 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V55 compact weather line
+
+- Baseline: V54.
+- Adds a compact `Humidity …%, wind … mph.` line to each card using the existing live values.
+- The rainfall sampling description, 24-hour range, source, and weather-center coordinates remain hidden.
+- Important weather failures and rainfall warnings remain visible.
+- The underlying NOAA data, calculations, diagnostics, Developer Mode, shared trail catalog, and community reports are unchanged.
+
+V55 verification results:
+
+- Browser: all 39 cards displayed the compact humidity/wind line.
+- No card displayed the removed rainfall-sampling, range, source, or weather-center text.
+- No unavailable rainfall card displayed green, and the browser produced no warnings or errors.
+- JavaScript syntax, inline-script parity, card-display, administrator publishing, shared-report, rainfall-aging, and NOAA request-contract checks passed.
+
 ## V54 card cleanup
 
 - Baseline: V53.
