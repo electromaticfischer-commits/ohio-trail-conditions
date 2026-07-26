@@ -12,12 +12,12 @@ function section(text, start, end) {
   return text.slice(text.indexOf(start), text.indexOf(end));
 }
 
-const toolbar = html.slice(html.indexOf('<div class="toolbar">'), html.indexOf('<div class="summary">'));
-assert(!toolbar.includes('id="locate"'), 'Location button remains in toolbar');
-assert(html.includes('<button id="locate" class="metric trail-metric metric-action"'));
-assert(html.includes('<b id="nearestTrail">Use location</b><span>Nearest trail</span>'));
-assert(source.includes("label.textContent='Locating…'"));
-assert(source.includes("label.textContent='Use location'"));
+const toolbar = html.slice(html.indexOf('<div class="toolbar">'), html.indexOf('<div class="layout">'));
+assert(toolbar.includes('id="locate"'), 'Compact location button is missing from toolbar');
+assert(html.includes('<button id="locate" class="location-control" type="button">Find trails near me</button>'));
+assert(!html.includes('<div class="summary">'), 'Large summary cards remain');
+assert(source.includes("b.textContent='Locating…'"));
+assert(source.includes("permission.state==='granted'"), 'Previously granted location is not reused');
 assert.strictEqual(
   section(source, 'function statusFrom', 'function getVotes'),
   section(previous, 'function statusFrom', 'function getVotes'),

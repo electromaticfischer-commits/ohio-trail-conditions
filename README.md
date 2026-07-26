@@ -1,5 +1,48 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V64 community count formatting
+
+- Baseline: V63.
+- Displays each Community Reports attribute in bold followed by its regular-weight user count in parentheses, such as `I'd wait (1)`.
+- Uses the same formatting for notable observations, such as `Fallen trees (2)`, and removes the warning icon.
+- Community-report data, aggregation, observation alerts, weather data, and trail calculations are unchanged.
+
+## V63 visual cleanup
+
+- Baseline: V62.
+- Renames the site `Ohio Mountain Bike Trail Conditions` and moves the refreshed time into the header.
+- Removes the large condition-count, best-trail, nearest-trail, and refreshed summary cards.
+- Keeps location as a compact toolbar action and silently reuses location only when the browser has already granted permission.
+- Displays Community Report labels first with the count afterward in bold.
+- Darkens the page background slightly so the white trail cards have clearer separation.
+- Weather data, condition calculations, community-report storage, and report aggregation are unchanged.
+
+V63 verification results:
+
+- Browser: all 39 trail cards loaded.
+- The page title and header displayed `Ohio Mountain Bike Trail Conditions`, with the refresh time in the header.
+- No large summary-card container rendered; the compact `Find trails near me` control rendered with the filters.
+- Lake Hope displayed `I'd wait 1`, with only `1` bold, followed by its fallen-tree and maintenance alert.
+- The page background rendered as the intended darker gray-green (`rgb(233, 237, 233)`).
+- Visual-cleanup, location, header, community-report, community-alert, ready-card, collapsed-information, usability, administrator-publishing, rainfall-aging, safeguard, and NOAA request-contract regressions passed.
+- NOAA point-rainfall code and trail calculations match the live-tested V62 baseline.
+
+## V62 community observation alerts
+
+- Baseline: V61.
+- Shows recent fallen-tree, trail-maintenance, and high-creek observations directly in the collapsed Community Reports control.
+- Prioritizes fallen trees and maintenance, shows counts, and limits the collapsed alert to two observations.
+- Routine surface observations remain available in the expanded report without adding clutter to every collapsed card.
+- Community-report storage, aggregation period, weather data, and trail calculations are unchanged.
+
+V62 verification results:
+
+- Browser: all 39 trail cards loaded.
+- Lake Hope's collapsed summary displayed `1 I'd wait` followed by `⚠ 2 Fallen trees · 2 Trail maintenance`.
+- Only the trail with notable maintenance observations displayed an alert; routine surface observations did not create collapsed warnings.
+- Community-alert, community-report, location, ready-card, collapsed-information, usability, administrator-publishing, rainfall-aging, safeguard, and NOAA request-contract regressions passed.
+- NOAA point-rainfall code and calculations match the live-tested V61 baseline.
+
 ## V61 simplified community reports
 
 - Baseline: V60.

@@ -12,7 +12,7 @@ function section(text, start, end) {
   return text.slice(text.indexOf(start), text.indexOf(end));
 }
 
-assert(source.includes("return {title:'Community Reports',summary:'Be the first to report conditions.'}"));
+assert(source.includes("return {title:'Community Reports',summary:'Be the first to report conditions.',alert:''}"));
 assert(source.includes("title:`Community Reports${age?` — ${age}`:''}`"));
 assert(source.includes("['Yes — a few wet spots','A few wet spots']"));
 assert(source.includes("['Rideable — expect mud','Expect mud']"));

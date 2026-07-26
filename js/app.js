@@ -772,7 +772,7 @@ function reportAge(report){
 function communityReportHeading(id){
  const report=communityReports.get(id);
  const total=Number(report?.total_reports)||0;
- if(!total)return {title:'Community Reports',summary:'Be the first to report conditions.'};
+ if(!total)return {title:'Community Reports',summary:'Be the first to report conditions.',alert:''};
  const counts=report.recommendations||{};
  const labels=[
   ['Absolutely','Absolutely'],
@@ -783,10 +783,21 @@ function communityReportHeading(id){
  ];
  const summary=labels
   .filter(([value])=>Number(counts[value]))
-  .map(([value,label])=>`${Number(counts[value])} ${label}`)
+  .map(([value,label])=>`<span><strong>${label}</strong> (${Number(counts[value])})</span>`)
+  .join(' · ');
+ const observationCounts=report.observations||{};
+ const notableObservations=[
+  ['Fallen trees',(count)=>count===1?'Fallen tree':'Fallen trees'],
+  ['Trail maintenance',()=> 'Trail maintenance'],
+  ['Creek crossings high',(count)=>count===1?'Creek crossing high':'Creek crossings high']
+ ];
+ const alert=notableObservations
+  .filter(([value])=>Number(observationCounts[value]))
+  .map(([value,label])=>`<strong>${label(Number(observationCounts[value]))}</strong> (${Number(observationCounts[value])})`)
+  .slice(0,2)
   .join(' · ');
  const age=reportAge(report);
- return {title:`Community Reports${age?` — ${age}`:''}`,summary:summary||`${total} recent report${total===1?'':'s'}`};
+ return {title:`Community Reports${age?` — ${age}`:''}`,summary:summary||`${total} recent report${total===1?'':'s'}`,alert};
 }
 function selectTrail(id,{moveMap=true,scrollCard=false}={}){
   const trail=results.find(r=>r.id===id);
@@ -820,7 +831,7 @@ function render(){
   }
   const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div>${readyFactHtml(r.ready)}</div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div><div class="explain">${r.weatherError?'Live weather could not be loaded for this trail. ':''}${r.rainWarning||''}${r.weatherError?'':'Humidity '+Math.round(r.humidity)+'%, wind '+Math.round(r.wind)+' mph.'}</div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
 <button type="button" class="report-toggle" data-report-toggle="${r.id}" aria-expanded="false">
-  <span><b>${communityHeading.title}</b><small>${communityHeading.summary}</small></span>
+  <span><b>${communityHeading.title}</b><small class="community-summary">${communityHeading.summary}</small>${communityHeading.alert?`<small class="community-alert">${communityHeading.alert}</small>`:''}</span>
   <span class="chev">⌄</span>
 </button>
 <div class="report-panel" data-report-panel="${r.id}">
@@ -878,7 +889,7 @@ arr.forEach(r=>{
   markers.push(m);
 });
 if(selectedTrailId&&arr.some(r=>r.id===selectedTrailId))selectTrail(selectedTrailId,{moveMap:false,scrollCard:false});
-document.getElementById('goodCount').textContent=results.filter(r=>r.status.key==='green').length;const best=[...results].filter(r=>Number.isFinite(r.rideability)).sort((a,b)=>b.rideability-a.rideability)[0],bestElement=document.getElementById('bestTrail');bestElement.textContent=best?best.name:'–';bestElement.title=best?best.name:'';const near=[...results].filter(r=>r.distance!=null).sort((a,b)=>a.distance-b.distance)[0],nearElement=document.getElementById('nearestTrail');nearElement.textContent=near?near.name:'Use location';nearElement.title=near?near.name:'';setTimeout(()=>map.invalidateSize(),100)}
+const near=[...results].filter(r=>r.distance!=null).sort((a,b)=>a.distance-b.distance)[0],locateButton=document.getElementById('locate');locateButton.textContent=near?`Near: ${near.name}`:'Find trails near me';locateButton.title=near?`Nearest trail: ${near.name}`:'Use my location to sort trails by distance';setTimeout(()=>map.invalidateSize(),100)}
 async function load(focusTrail=null){
   document.getElementById('trailList').innerHTML='<div class="loading">Loading live weather for Ohio trails…</div>';
   await loadSharedData();
@@ -916,7 +927,16 @@ async function load(focusTrail=null){
 
   if(focusTrail)selectTrail(focusTrail.id,{moveMap:true,scrollCard:false});
 }
-function locate(){const b=document.getElementById('locate'),label=document.getElementById('nearestTrail');if(!navigator.geolocation){alert('Location is not supported in this browser.');return}b.disabled=true;label.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{userLocation={lat:pos.coords.latitude,lon:pos.coords.longitude};results=results.map(r=>({...r,distance:haversine(userLocation.lat,userLocation.lon,r.lat,r.lon)}));if(userMarker)map.removeLayer(userMarker);userMarker=L.circleMarker([userLocation.lat,userLocation.lon],{radius:8,color:'#173f2a',fillColor:'#fff',fillOpacity:1,weight:3}).bindPopup('Your location').addTo(map);map.setView([userLocation.lat,userLocation.lon],8);b.disabled=false;document.getElementById('sort').value='distance';render()},()=>{b.disabled=false;label.textContent='Use location';alert('Location was not shared.')})}
+function locate({silent=false}={}){const b=document.getElementById('locate');if(!navigator.geolocation){if(!silent)alert('Location is not supported in this browser.');return}b.disabled=true;b.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{userLocation={lat:pos.coords.latitude,lon:pos.coords.longitude};results=results.map(r=>({...r,distance:haversine(userLocation.lat,userLocation.lon,r.lat,r.lon)}));if(userMarker)map.removeLayer(userMarker);userMarker=L.circleMarker([userLocation.lat,userLocation.lon],{radius:8,color:'#173f2a',fillColor:'#fff',fillOpacity:1,weight:3}).bindPopup('Your location').addTo(map);map.setView([userLocation.lat,userLocation.lon],8);b.disabled=false;document.getElementById('sort').value='distance';render()},()=>{b.disabled=false;b.textContent='Find trails near me';if(!silent)alert('Location was not shared.')})}
+async function reuseGrantedLocation(){
+ if(!navigator.permissions||!navigator.geolocation)return;
+ try{
+  const permission=await navigator.permissions.query({name:'geolocation'});
+  if(permission.state==='granted')locate({silent:true});
+ }catch(error){
+  // Some browsers support geolocation but not permission-state queries.
+ }
+}
 function slug(s){return s.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'-'+Date.now().toString(36)}
 function clearExistingSelectOptions(){
  document.querySelectorAll('option[data-existing-value="true"]').forEach(option=>option.remove());
@@ -1188,4 +1208,4 @@ updateDeveloperUI();
 document.getElementById('manage').onclick=()=>{clearPickState(true);renderAdmin();updateLocationStatus();const d=document.getElementById('trailDialog');if(!d.open)d.showModal()};document.getElementById('adminSearch')?.addEventListener('input',renderAdmin);document.getElementById('closeDialog').onclick=()=>{clearPickState(true);document.getElementById('trailDialog').close();resetForm()};document.getElementById('trailForm').onsubmit=saveTrail;document.getElementById('resetForm').onclick=resetForm;document.getElementById('pickAccessOnMap').onclick=()=>beginPickMode('access');document.getElementById('pickWeatherOnMap').onclick=()=>beginPickMode('weather');document.getElementById('copyAccessToWeather').onclick=copyAccessToWeather;document.getElementById('cancelPick').onclick=()=>{clearPickState(false);const d=document.getElementById('trailDialog');if(!d.open)d.showModal()};document.getElementById('exportTrails').onclick=exportData;document.getElementById('importTrails').onchange=e=>{const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);customTrails=Array.isArray(d.customTrails)?d.customTrails:[];hiddenTrailIds=Array.isArray(d.hiddenTrailIds)?d.hiddenTrailIds:[];deletedTrailIds=Array.isArray(d.deletedTrailIds)?d.deletedTrailIds:[];builtInOverrides=d.builtInOverrides&&typeof d.builtInOverrides==='object'?d.builtInOverrides:{};localStorage.setItem('customTrails',JSON.stringify(customTrails));localStorage.setItem('hiddenTrailIds',JSON.stringify(hiddenTrailIds));localStorage.setItem('deletedTrailIds',JSON.stringify(deletedTrailIds));localStorage.setItem('builtInOverrides',JSON.stringify(builtInOverrides));load();alert('Trail edits imported.')}catch(err){alert('That file could not be imported.')}};reader.readAsText(f)};
 document.getElementById('trailDialog').addEventListener('cancel',()=>{clearPickState(true);resetForm()});
 verifyAdminSession();
-load();
+load().then(reuseGrantedLocation);
