@@ -1,5 +1,42 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V54 card cleanup
+
+- Baseline: V53.
+- Removes the technical rainfall-sampling, 24-hour range, humidity, wind, source, and weather-center paragraph from every trail card.
+- Important weather failures and rainfall warnings remain visible.
+- The underlying NOAA data, calculations, diagnostics, Developer Mode, shared trail catalog, and community reports are unchanged.
+
+V54 verification results:
+
+- Browser: all 39 cards loaded, with no technical rainfall paragraph and no empty paragraph space on any card.
+- Important unavailable-rainfall safeguards remained active; no unavailable card displayed green.
+- The browser produced no warnings or errors.
+- JavaScript syntax, inline-script parity, card-cleanup, administrator publishing, shared-report, rainfall-aging, and NOAA request-contract checks passed.
+
+## V53 administrator publishing
+
+- Baseline: V52.
+- The Developer button now opens a Supabase administrator login.
+- Authorized administrators can add, edit, hide, restore, and archive trails; each saved change is published directly to the shared Supabase catalog.
+- Regular visitors remain account-free and read-only.
+- The administrator session is kept in that browser until sign-out or expiration.
+- NOAA rainfall retrieval, rainfall aging, rideability, readiness, community reporting, map overlays, and trail-card calculations are unchanged from V52.
+
+V53 verification results:
+
+- Supabase reports all 3 administrator functions installed.
+- Live public-security checks passed: unauthenticated users could read all 39 shared trails but could not call either administrator publishing function.
+- Browser: all 39 trail cards loaded; Manage trails and Sign out stayed hidden for a public visitor.
+- Browser: the Developer button opened the administrator login, and invalid credentials were rejected without exposing Manage trails.
+- No unavailable or unverified rainfall card displayed green, and a clean browser load produced no warnings or errors.
+- Live NOAA checks passed at Columbus, Cleveland, and Cincinnati for 12/24/48/72 hours at product time `2026-07-26T00:00:00Z`.
+- JavaScript syntax, inline-script parity, administrator publishing, shared-report, rainfall-aging, and NOAA request-contract checks passed.
+
+Not verified:
+
+- A successful administrator login and authenticated publish require the administrator's private email and password. Those credentials were not requested or accessed during packaging.
+
 ## V52 shared trails and community reports
 
 - Baseline: V51.

@@ -21,12 +21,24 @@
 <select id="sort"><option value="distance">Nearest first</option><option value="rideability">Best rideability</option><option value="name">Trail name</option></select>
 <button id="locate" class="primary" type="button">Use my location</button>
 <button id="manage" type="button" hidden>Manage trails</button>
+<button id="adminSignOut" type="button" hidden>Sign out</button>
 </div>
-<div class="notice">Predictions are advisory. Official closures always override the model. Community reports are shared; Developer Mode trail edits remain local until published.</div>
+<div class="notice">Predictions are advisory. Official closures always override the model. Community reports and authorized Developer Mode trail changes are shared.</div>
 <div class="summary"><div class="metric"><b id="goodCount">–</b><span>Likely good</span></div><div class="metric"><b id="bestTrail">–</b><span>Best rideability</span></div><div class="metric"><b id="nearestTrail">–</b><span>Nearest trail</span></div><div class="metric"><b id="updated">–</b><span>Last refreshed</span></div></div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading live weather…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v52.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v54.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+
+<dialog id="adminLoginDialog" class="login-dialog">
+<div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
+<form id="adminLoginForm" class="login-form">
+<p>Authorized administrators can publish trail changes for every user.</p>
+<label>Email<input id="adminEmail" type="email" autocomplete="username" required></label>
+<label>Password<input id="adminPassword" type="password" autocomplete="current-password" required></label>
+<div id="adminLoginMessage" class="login-message" aria-live="polite"></div>
+<button id="adminLoginButton" class="primary" type="submit">Sign in</button>
+</form>
+</dialog>
 
 <dialog id="trailDialog">
 <div class="modal-head"><h2 id="trailDialogTitle">Manage trail catalog</h2><button id="closeDialog" type="button">Close</button></div>
@@ -124,24 +136,95 @@ let deletedTrailIds=readJSON('deletedTrailIds',[]);
 let builtInOverrides=readJSON('builtInOverrides',{});
 let sharedTrails=null;
 let communityReports=new Map();
+let adminSession=readJSON('ohioTrailAdminSession',null);
+let adminAuthenticated=false;
 function readJSON(k,f){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(e){return f}}
 function effectiveBaseTrail(t){return builtInOverrides[t.id]?{...t,...builtInOverrides[t.id],id:t.id}:t}
 function allManagedTrails(){
- const records=new Map((sharedTrails||baseTrails).map(t=>[t.id,{...t,source:sharedTrails?'Shared':'Built-in'}]));
+ if(sharedTrails)return sharedTrails.map(t=>({...t,source:'Shared'}));
+ const records=new Map(baseTrails.map(t=>[t.id,{...t,source:'Built-in'}]));
  baseTrails.forEach(t=>{if(builtInOverrides[t.id])records.set(t.id,{...t,...builtInOverrides[t.id],id:t.id,source:'Local edit'})});
  customTrails.forEach(t=>records.set(t.id,{...t,source:'Local edit'}));
  return [...records.values()];
 }
 function catalog(){return allManagedTrails().filter(t=>!hiddenTrailIds.includes(t.id)&&!deletedTrailIds.includes(t.id)&&!['Hidden','Archived','Permanently closed'].includes(t.recordStatus))}
-async function supabaseRpc(name,body={}){
+async function supabaseRpc(name,body={},accessToken=null){
+ const headers={apikey:SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'};
+ if(accessToken)headers.Authorization=`Bearer ${accessToken}`;
  const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{
   method:'POST',
-  headers:{apikey:SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'},
+  headers,
   body:JSON.stringify(body)
  });
  const text=await response.text();
  if(!response.ok)throw new Error(text||`Shared data request failed (HTTP ${response.status})`);
  return text?JSON.parse(text):null;
+}
+async function authRequest(path,body,accessToken=null){
+ const headers={apikey:SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'};
+ if(accessToken)headers.Authorization=`Bearer ${accessToken}`;
+ const response=await fetch(`${SUPABASE_URL}/auth/v1/${path}`,{
+  method:'POST',headers,body:body===undefined?undefined:JSON.stringify(body)
+ });
+ const text=await response.text();
+ const data=text?JSON.parse(text):null;
+ if(!response.ok)throw new Error(data?.msg||data?.message||data?.error_description||'Sign in failed');
+ return data;
+}
+function storeAdminSession(data){
+ adminSession={
+  accessToken:data.access_token,
+  refreshToken:data.refresh_token,
+  expiresAt:Date.now()+(Number(data.expires_in)||3600)*1000,
+  email:data.user?.email||adminSession?.email||''
+ };
+ localStorage.setItem('ohioTrailAdminSession',JSON.stringify(adminSession));
+}
+async function adminAccessToken(){
+ if(!adminSession?.accessToken)return null;
+ if(Number(adminSession.expiresAt)>Date.now()+60000)return adminSession.accessToken;
+ if(!adminSession.refreshToken)return null;
+ const refreshed=await authRequest('token?grant_type=refresh_token',{refresh_token:adminSession.refreshToken});
+ storeAdminSession(refreshed);
+ return adminSession.accessToken;
+}
+async function verifyAdminSession(){
+ try{
+  const token=await adminAccessToken();
+  adminAuthenticated=Boolean(token&&await supabaseRpc('is_ohio_trail_admin',{},token));
+ }catch(error){
+  adminAuthenticated=false;
+ }
+ if(!adminAuthenticated){
+  adminSession=null;
+  localStorage.removeItem('ohioTrailAdminSession');
+  developerMode=false;
+  localStorage.setItem('developerMode','false');
+ }
+ updateDeveloperUI();
+ return adminAuthenticated;
+}
+async function adminRpc(name,body={}){
+ const token=await adminAccessToken();
+ if(!token||!adminAuthenticated)throw new Error('Administrator sign in required');
+ return supabaseRpc(name,body,token);
+}
+async function signInAdministrator(email,password){
+ const session=await authRequest('token?grant_type=password',{email,password});
+ storeAdminSession(session);
+ const authorized=await verifyAdminSession();
+ if(!authorized)throw new Error('This account is not authorized for Developer Mode');
+ return true;
+}
+async function signOutAdministrator(){
+ try{
+  const token=await adminAccessToken();
+  if(token)await authRequest('logout',undefined,token);
+ }catch(error){console.warn('Administrator sign-out request did not complete',error)}
+ adminSession=null;adminAuthenticated=false;developerMode=false;
+ localStorage.removeItem('ohioTrailAdminSession');
+ localStorage.setItem('developerMode','false');
+ updateDeveloperUI();
 }
 function reporterToken(){
  let token=localStorage.getItem('trailReporterToken');
@@ -815,7 +898,7 @@ function render(){
   if(userLocation){
     results=results.map(r=>({...r,distance:currentDistance(r)}));
   }
-  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div><div class="fact"><b>${r.ready}</b><span>ready in</span></div></div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div>${trailCharacteristics(r)}<div class="explain">${r.weatherError?'Live weather could not be loaded for this trail. ':''}${r.rainWarning||''}${r.weatherError?'':'Rainfall sampled across a '+r.rainSampleRadius+'-mile trail area. 24-hour range: '+formatInches(r.rain24Min)+'–'+formatInches(r.rain24Max)+'. Humidity '+Math.round(r.humidity)+'%, wind '+Math.round(r.wind)+' mph. Rain source: '+(r.rainSource||'unknown')+'. Weather center: '+trailWeatherLat(r).toFixed(4)+', '+trailWeatherLon(r).toFixed(4)+'.'}</div>${rainfallDiagnosticsPanel(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div><div class="community">
+  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div><div class="fact"><b>${r.ready}</b><span>ready in</span></div></div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div>${trailCharacteristics(r)}${r.weatherError||r.rainWarning?`<div class="explain">${r.weatherError?'Live weather could not be loaded for this trail. ':''}${r.rainWarning||''}</div>`:''}${rainfallDiagnosticsPanel(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div><div class="community">
 <button type="button" class="report-toggle" data-report-toggle="${r.id}" aria-expanded="false">
   <span>${vote?'Update your trail report':'Report trail conditions'}${communityReports.get(r.id)?` · ${Number(communityReports.get(r.id).total_reports)} recent`:''}</span>
   <span class="chev">⌄</span>
@@ -973,6 +1056,12 @@ async function saveTrail(e){
     const savedTrail={...existingRecord,...t,id:t.id};
     delete savedTrail.source;
 
+    await adminRpc('admin_upsert_ohio_trail',{p_data:savedTrail});
+    if(sharedTrails){
+      const sharedIndex=sharedTrails.findIndex(x=>x.id===savedTrail.id);
+      if(sharedIndex>=0)sharedTrails[sharedIndex]=savedTrail;else sharedTrails.push(savedTrail);
+    }
+
     if(base){
       // Store only a complete, merged record so older built-in metadata is not lost.
       builtInOverrides[t.id]=savedTrail;
@@ -1018,7 +1107,7 @@ async function saveTrail(e){
       }
     }
     renderAdmin();
-    alert(`${savedTrail.name} was saved.`);
+    alert(`${savedTrail.name} was published for all users.`);
   }catch(error){
     console.error('Could not save trail',error);
     alert('The trail could not be saved. Your form has been left intact so you can try again.');
@@ -1075,33 +1164,43 @@ function populateTrailForm(t){
  document.querySelector('.modal-body')?.scrollTo({top:0,behavior:'auto'});
 }
 function editTrail(id){const t=allManagedTrails().find(x=>x.id===id);if(t)populateTrailForm(t)}
-function setHidden(id,hidden){
- hiddenTrailIds=hidden?[...new Set([...hiddenTrailIds,id])]:hiddenTrailIds.filter(x=>x!==id);
- localStorage.setItem('hiddenTrailIds',JSON.stringify(hiddenTrailIds));
- load();
+async function setHidden(id,hidden){
+ try{
+  await adminRpc('admin_set_ohio_trail_status',{p_trail_id:id,p_status:hidden?'Hidden':'Active'});
+  hiddenTrailIds=hiddenTrailIds.filter(x=>x!==id);
+  localStorage.setItem('hiddenTrailIds',JSON.stringify(hiddenTrailIds));
+  await load();
+ }catch(error){console.error(error);alert('The shared trail visibility could not be changed.')}
 }
-function deleteTrail(id){
- const custom=customTrails.some(t=>t.id===id);
+async function deleteTrail(id){
  const name=(allManagedTrails().find(t=>t.id===id)||{}).name||'this trail';
- if(!confirm(`Delete ${name} from the app? You can restore built-in trails later from Manage trails.`))return;
- hiddenTrailIds=hiddenTrailIds.filter(x=>x!==id);
- if(custom){
-   customTrails=customTrails.filter(x=>x.id!==id);
-   localStorage.setItem('customTrails',JSON.stringify(customTrails));
- }else{
-   deletedTrailIds=[...new Set([...deletedTrailIds,id])];
-   localStorage.setItem('deletedTrailIds',JSON.stringify(deletedTrailIds));
- }
- localStorage.setItem('hiddenTrailIds',JSON.stringify(hiddenTrailIds));
- load();
+ if(!confirm(`Archive ${name} for every user? You can restore it later from Manage trails.`))return;
+ try{
+  await adminRpc('admin_set_ohio_trail_status',{p_trail_id:id,p_status:'Archived'});
+  hiddenTrailIds=hiddenTrailIds.filter(x=>x!==id);
+  deletedTrailIds=deletedTrailIds.filter(x=>x!==id);
+  localStorage.setItem('hiddenTrailIds',JSON.stringify(hiddenTrailIds));
+  localStorage.setItem('deletedTrailIds',JSON.stringify(deletedTrailIds));
+  await load();
+ }catch(error){console.error(error);alert('The shared trail could not be archived.')}
 }
-function restoreDeleted(id){deletedTrailIds=deletedTrailIds.filter(x=>x!==id);localStorage.setItem('deletedTrailIds',JSON.stringify(deletedTrailIds));load()}
-function resetBuiltIn(id){
+async function restoreDeleted(id){
+ try{
+  await adminRpc('admin_set_ohio_trail_status',{p_trail_id:id,p_status:'Active'});
+  deletedTrailIds=deletedTrailIds.filter(x=>x!==id);
+  localStorage.setItem('deletedTrailIds',JSON.stringify(deletedTrailIds));
+  await load();
+ }catch(error){console.error(error);alert('The shared trail could not be restored.')}
+}
+async function resetBuiltIn(id){
  const base=baseTrails.find(t=>t.id===id);if(!base)return;
  if(!confirm(`Reset ${base.name} to its original built-in information?`))return;
- delete builtInOverrides[id];
- localStorage.setItem('builtInOverrides',JSON.stringify(builtInOverrides));
- load();
+ try{
+  await adminRpc('admin_upsert_ohio_trail',{p_data:base});
+  delete builtInOverrides[id];
+  localStorage.setItem('builtInOverrides',JSON.stringify(builtInOverrides));
+  await load();
+ }catch(error){console.error(error);alert('The shared trail could not be reset.')}
 }
 function renderAdmin(){
  const q=(document.getElementById('adminSearch')?.value||'').trim().toLowerCase();
@@ -1109,26 +1208,67 @@ function renderAdmin(){
   .filter(t=>!q||[t.name,t.region,t.aliases||'',t.source].join(' ').toLowerCase().includes(q))
   .sort((a,b)=>a.name.localeCompare(b.name))
   .map(t=>{
-    const hidden=hiddenTrailIds.includes(t.id),deleted=deletedTrailIds.includes(t.id),edited=t.source==='Built-in'&&Boolean(builtInOverrides[t.id]);
+    const hidden=t.recordStatus==='Hidden'||hiddenTrailIds.includes(t.id),deleted=t.recordStatus==='Archived'||deletedTrailIds.includes(t.id),edited=t.source==='Built-in'&&Boolean(builtInOverrides[t.id]);
     const state=deleted?'Deleted':hidden?'Hidden':'Visible';
     const actions=deleted
       ? `<button type="button" data-restore="${t.id}">Restore</button>`
-      : `<button type="button" data-edit="${t.id}">Edit</button><button type="button" data-hide="${t.id}">${hidden?'Show':'Hide'}</button>${edited?`<button type="button" data-reset="${t.id}">Reset</button>`:''}<button type="button" class="danger" data-delete="${t.id}">Delete</button>`;
+      : `<button type="button" data-edit="${t.id}">Edit</button><button type="button" data-hide="${t.id}" data-hide-next="${hidden?'false':'true'}">${hidden?'Show':'Hide'}</button>${edited?`<button type="button" data-reset="${t.id}">Reset</button>`:''}<button type="button" class="danger" data-delete="${t.id}">Archive</button>`;
     return `<div class="admin-row ${hidden?'is-hidden':''} ${deleted?'is-deleted':''}"><div><strong><span class="status-dot"></span>${t.name}</strong><br><small>${t.source}${edited?' · edited':''} · ${state} · ${t.region||'Region unavailable'}</small></div><div class="admin-actions">${actions}</div></div>`;
   });
  document.getElementById('adminRows').innerHTML=rows.join('')||'<p><small>No matching trails.</small></p>';
  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editTrail(b.dataset.edit));
- document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=()=>setHidden(b.dataset.hide,!hiddenTrailIds.includes(b.dataset.hide)));
+ document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=()=>setHidden(b.dataset.hide,b.dataset.hideNext==='true'));
  document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>deleteTrail(b.dataset.delete));
  document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>restoreDeleted(b.dataset.restore));
  document.querySelectorAll('[data-reset]').forEach(b=>b.onclick=()=>resetBuiltIn(b.dataset.reset));
 }
 function exportData(){const blob=new Blob([JSON.stringify({customTrails,hiddenTrailIds,deletedTrailIds,builtInOverrides},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ohio-trail-edits.json';a.click();URL.revokeObjectURL(a.href)}
 document.getElementById('search').addEventListener('input',render);document.getElementById('statusFilter').addEventListener('change',render);document.getElementById('sort').addEventListener('change',render);document.getElementById('locate').addEventListener('click',locate);
-function updateDeveloperUI(){const b=document.getElementById('developerMode'),manage=document.getElementById('manage');b.textContent=developerMode?'Developer: On':'Developer';b.setAttribute('aria-pressed',String(developerMode));b.classList.toggle('is-active',developerMode);manage.hidden=!developerMode}
-document.getElementById('developerMode').addEventListener('click',()=>{developerMode=!developerMode;localStorage.setItem('developerMode',JSON.stringify(developerMode));updateDeveloperUI();render()});updateDeveloperUI();
+function updateDeveloperUI(){
+ const b=document.getElementById('developerMode'),manage=document.getElementById('manage'),signOut=document.getElementById('adminSignOut');
+ b.textContent=adminAuthenticated?(developerMode?'Developer: On':'Developer: Signed in'):'Developer';
+ b.setAttribute('aria-pressed',String(adminAuthenticated&&developerMode));
+ b.classList.toggle('is-active',adminAuthenticated&&developerMode);
+ manage.hidden=!(adminAuthenticated&&developerMode);
+ signOut.hidden=!adminAuthenticated;
+}
+function openAdminLogin(){
+ const dialog=document.getElementById('adminLoginDialog'),message=document.getElementById('adminLoginMessage');
+ message.textContent='';
+ if(!dialog.open)dialog.showModal();
+ document.getElementById('adminEmail').focus();
+}
+document.getElementById('developerMode').addEventListener('click',()=>{
+ if(!adminAuthenticated){openAdminLogin();return}
+ developerMode=!developerMode;
+ localStorage.setItem('developerMode',JSON.stringify(developerMode));
+ updateDeveloperUI();
+ render();
+});
+document.getElementById('adminLoginForm').addEventListener('submit',async event=>{
+ event.preventDefault();
+ const button=document.getElementById('adminLoginButton'),message=document.getElementById('adminLoginMessage');
+ button.disabled=true;message.textContent='Signing in…';
+ try{
+  await signInAdministrator(document.getElementById('adminEmail').value,document.getElementById('adminPassword').value);
+  developerMode=true;
+  localStorage.setItem('developerMode','true');
+  document.getElementById('adminPassword').value='';
+  document.getElementById('adminLoginDialog').close();
+  updateDeveloperUI();
+  render();
+ }catch(error){console.error(error);message.textContent=error.message||'Sign-in failed.'}
+ finally{button.disabled=false}
+});
+document.getElementById('closeAdminLogin').addEventListener('click',()=>{
+ document.getElementById('adminPassword').value='';
+ document.getElementById('adminLoginDialog').close();
+});
+document.getElementById('adminSignOut').addEventListener('click',async()=>{await signOutAdministrator();render()});
+updateDeveloperUI();
 document.getElementById('manage').onclick=()=>{clearPickState(true);renderAdmin();updateLocationStatus();const d=document.getElementById('trailDialog');if(!d.open)d.showModal()};document.getElementById('adminSearch')?.addEventListener('input',renderAdmin);document.getElementById('closeDialog').onclick=()=>{clearPickState(true);document.getElementById('trailDialog').close();resetForm()};document.getElementById('trailForm').onsubmit=saveTrail;document.getElementById('resetForm').onclick=resetForm;document.getElementById('pickAccessOnMap').onclick=()=>beginPickMode('access');document.getElementById('pickWeatherOnMap').onclick=()=>beginPickMode('weather');document.getElementById('copyAccessToWeather').onclick=copyAccessToWeather;document.getElementById('cancelPick').onclick=()=>{clearPickState(false);const d=document.getElementById('trailDialog');if(!d.open)d.showModal()};document.getElementById('exportTrails').onclick=exportData;document.getElementById('importTrails').onchange=e=>{const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);customTrails=Array.isArray(d.customTrails)?d.customTrails:[];hiddenTrailIds=Array.isArray(d.hiddenTrailIds)?d.hiddenTrailIds:[];deletedTrailIds=Array.isArray(d.deletedTrailIds)?d.deletedTrailIds:[];builtInOverrides=d.builtInOverrides&&typeof d.builtInOverrides==='object'?d.builtInOverrides:{};localStorage.setItem('customTrails',JSON.stringify(customTrails));localStorage.setItem('hiddenTrailIds',JSON.stringify(hiddenTrailIds));localStorage.setItem('deletedTrailIds',JSON.stringify(deletedTrailIds));localStorage.setItem('builtInOverrides',JSON.stringify(builtInOverrides));load();alert('Trail edits imported.')}catch(err){alert('That file could not be imported.')}};reader.readAsText(f)};
 document.getElementById('trailDialog').addEventListener('cancel',()=>{clearPickState(true);resetForm()});
+verifyAdminSession();
 load();
 </script>
 </body>
