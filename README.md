@@ -1,5 +1,106 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V61 simplified community reports
+
+- Baseline: V60.
+- Collapsed report controls show `Community Reports — [age]` and the recommendation totals.
+- Trails without reports show `Community Reports` and `Be the first to report conditions.`
+- Removes the duplicated expanded community summary, repeated selection instructions, `Shared with everyone`, and `You reported` sentence.
+- Uses shorter editor headings and recommendation labels while preserving the existing stored report values.
+- Displays `Saved and shared` with the existing remove control after a report is saved.
+- Prevents `Perfect traction` from remaining selected with wet-surface observations.
+- Report storage, 48-hour aggregation, trail calculations, weather data, and community reports remain separate from the calculated rating.
+
+V61 verification results:
+
+- Browser: all 39 trail cards loaded with no warnings or errors.
+- A trail without reports displayed `Community Reports` and `Be the first to report conditions.`
+- A trail with a current report displayed `Community Reports — now` and `1 I'd wait`.
+- The expanded editor displayed the shortened recommendation labels and headings without the duplicated community summary or instructions.
+- Static regressions passed for community reports, location control, ready-card cleanup, collapsed trail information, usability, administrator publishing, shared reports, rainfall aging, rainfall safeguards, and the NOAA request contract.
+- Live NOAA checks passed for 12/24/48/72-hour data at Columbus, Cleveland, and Cincinnati; all returned 0.000 inches at product time `2026-07-26T02:00:00Z`.
+- Live database security passed: unauthenticated trail publishing was denied and all 39 shared trails remained readable.
+- The locally owned `Saved and shared` state was verified by automated checks but was not changed in the browser because that would alter a public report.
+
+## V60 location control
+
+- Baseline: V59.
+- Moves `Use my location` from the toolbar into the `Nearest trail / Use location` summary card.
+- The summary card becomes the location button and displays the nearest trail after location is shared.
+- Distance calculations, sorting, map behavior, data, and condition calculations are unchanged.
+
+V60 verification results:
+
+- Browser: exactly one location control rendered inside the four-card summary, with `Use location / Nearest trail`.
+- No location control remained in the toolbar.
+- All 39 trail cards loaded and the browser produced no warnings or errors.
+- JavaScript syntax, inline-script parity, location-control, ready-card, collapsed-information, usability, rainfall-aging, safeguard, and NOAA request-contract checks passed.
+
+## V59 ready-card cleanup
+
+- Baseline: V58.
+- Removes the `condition estimate` subtitle when a card displays `Ready now`.
+- Wet-trail readiness estimates, unavailable-status wording, data, and calculations are unchanged.
+
+V59 verification results:
+
+- Browser: all 39 current ready cards displayed `Ready now` with no subtitle or empty subtitle element.
+- All 39 collapsed Trail information sections remained intact.
+- The browser produced no warnings or errors.
+- JavaScript syntax, inline-script parity, ready-card, collapsed-information, usability, rainfall-aging, safeguard, and NOAA request-contract checks passed.
+
+## V58 collapsed trail information
+
+- Baseline: V57.
+- Moves the complete Trail characteristics block inside the collapsed `Trail information` section, above the official and mapping links.
+- Condition facts, rideability, humidity/wind, rider reports, data sources, and calculations are unchanged.
+
+V58 verification results:
+
+- Browser: all 39 cards loaded with Trail characteristics hidden while each `Trail information` section was collapsed.
+- Opening `Trail information` displayed the characteristics followed by the available trail links.
+- No Trail characteristics block remained outside its collapsed section.
+- The browser produced no warnings or errors.
+- JavaScript syntax, inline-script parity, collapsed-information, usability, administrator, shared-report, rainfall-aging, safeguard, and NOAA request-contract checks passed.
+
+## V57 usability cleanup
+
+- Baseline: V56.
+- Shows rainfall ages of 48 hours or more in days.
+- Replaces `Now / ready in` with the clearer `Ready now / condition estimate`.
+- Gives long trail names more room in the top summary.
+- Adds a compact rider-report tally and freshness label before the report panel.
+- Adds `Recently reported` sorting.
+- Consolidates card links under `Trail information`.
+- Keeps rainfall diagnostics exclusive to authenticated Developer Mode.
+- NOAA retrieval, rainfall aging, rideability, readiness calculations, safeguards, shared trails, and report storage are unchanged.
+
+V57 verification results:
+
+- Browser: all 39 cards loaded; every older rain age displayed in days, with no high-hour labels remaining.
+- All currently dry cards displayed `Ready now`; the former `ready in` label was absent.
+- All 39 cards displayed compact report freshness and a working `Trail information` menu.
+- `Recently reported` sorting was selectable and rainfall diagnostics were absent for public visitors.
+- The top summary, map, compact humidity/wind line, and administrator gate remained intact.
+- The browser produced no warnings or errors.
+- Live NOAA 12/24/48/72-hour checks passed at Columbus, Cleveland, and Cincinnati at product time `2026-07-26T01:00:00Z`.
+- Live Supabase security passed: 39 shared trails remained readable and unauthenticated publishing remained blocked.
+- JavaScript syntax, inline-script parity, usability, header, card, administrator, shared-report, rainfall-aging, safeguard, and NOAA request-contract checks passed.
+
+## V56 header cleanup
+
+- Baseline: V55.
+- Removes the technical subtitle beneath the site title.
+- Removes the large advisory banner above the summary.
+- Weather data, calculations, warnings, cards, diagnostics, Developer Mode, shared trails, and community reports are unchanged.
+
+V56 verification results:
+
+- Browser: the title remained, while the subtitle and advisory banner were absent.
+- The summary, map, all 39 cards, and all 39 compact humidity/wind lines rendered correctly.
+- The browser produced no warnings or errors.
+- JavaScript syntax, inline-script parity, header-cleanup, card-display, administrator publishing, shared-report, rainfall-aging, and NOAA request-contract checks passed.
+
 ## V55 compact weather line
 
 - Baseline: V54.

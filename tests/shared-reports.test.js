@@ -30,7 +30,8 @@ assert(source.includes("supabaseRpc('save_my_trail_report'"));
 assert(source.includes("supabaseRpc('remove_my_trail_report'"));
 assert(source.includes('current.value===value?null:value'), 'Selected recommendation must be removable');
 assert(source.includes('data-remove-report'), 'Report removal control is missing');
-assert(source.includes('Community reports — last 48 hr'));
+assert(source.includes('Community Reports'));
+assert(source.includes('communityReportHeading'));
 assert.doesNotThrow(() => new Function(inline), 'Inline application script must have valid JavaScript syntax');
 
 console.log('Shared-report integration regression tests passed.');

@@ -252,6 +252,13 @@ function timeMs(value){
 }
 function sumRange(v,t,h){const n=Date.now();return (v||[]).reduce((s,x,i)=>{const z=timeMs((t||[])[i]);return z<=n&&z>=n-h*3600000?s+(Number(x)||0):s},0)}
 function avgRange(v,t,h){const n=Date.now();let s=0,c=0;(v||[]).forEach((x,i)=>{const z=timeMs((t||[])[i]);if(z<=n&&z>=n-h*3600000){s+=Number(x)||0;c++}});return c?s/c:0}
+function elapsedLabel(hours,{plus=false}={}){
+  const value=Math.max(0,Math.floor(Number(hours)||0));
+  if(value<1)return 'Now';
+  if(value<48)return `${value} hr ago`;
+  const days=Math.max(2,Math.floor(value/24));
+  return `${days}${plus?'+':''} days ago`;
+}
 function lastRainLabel(values,times){
   const now=Date.now();
   let latest=null;
@@ -259,10 +266,14 @@ function lastRainLabel(values,times){
     const when=timeMs((times||[])[i]);
     if(Number.isFinite(when)&&when<=now&&Number(value)>=0.005&&(latest===null||when>latest))latest=when;
   });
-  if(latest===null)return '72+ hr ago';
+  if(latest===null)return elapsedLabel(72,{plus:true});
   const hours=Math.max(0,Math.floor((now-latest)/3600000));
-  if(hours<1)return 'Now';
-  return `${hours} hr ago`;
+  return elapsedLabel(hours);
+}
+function readyFactHtml(ready){
+  if(ready==='Now')return '<div class="fact"><b>Ready now</b></div>';
+  if(ready==='Check official status')return '<div class="fact"><b>Check official status</b><span>readiness</span></div>';
+  return `<div class="fact"><b>${ready}</b><span>estimated ready</span></div>`;
 }
 function statusFrom(score,temp){if(temp<34&&score>32)return{key:'blue',label:'Freeze-thaw risk'};if(score<24)return{key:'green',label:'Likely good'};if(score<43)return{key:'yellow',label:'Use caution'};if(score<63)return{key:'orange',label:'Marginal'};return{key:'red',label:'Likely wet'}}
 function readyEstimate(score,d){if(score<24)return'Now';const h=Math.max(4,Math.round((score-20)/(2.4*d)));return h<24?`~${h} hr`:`~${Math.ceil(h/24)} day${Math.ceil(h/24)>1?'s':''}`}
@@ -311,7 +322,12 @@ function saveVote(id,value){
 function toggleObservation(id,observation){
  const current=getVotes(id)||{value:null,observations:[]};
  const observations=Array.isArray(current.observations)?[...current.observations]:[];
- const next=observations.includes(observation)?observations.filter(x=>x!==observation):[...observations,observation];
+ const wetObservations=['A few puddles','Frequent puddles','Tires picked up mud','Soft sections','Creek crossings high'];
+ let next;
+ if(observations.includes(observation))next=observations.filter(x=>x!==observation);
+ else if(observation==='Perfect traction')next=[...observations.filter(x=>!wetObservations.includes(x)),observation];
+ else if(wetObservations.includes(observation))next=[...observations.filter(x=>x!=='Perfect traction'),observation];
+ else next=[...observations,observation];
  persistVote(id,current.value,next);
 }
 function removeVote(id){persistVote(id,null,[])}
@@ -734,28 +750,43 @@ function sortedFiltered(){
     });
   }else if(s==='rideability'){
     a.sort((x,y)=>(Number.isFinite(y.rideability)?y.rideability:-1)-(Number.isFinite(x.rideability)?x.rideability:-1));
+  }else if(s==='recent-report'){
+    a.sort((x,y)=>{
+      const xt=new Date(communityReports.get(x.id)?.latest_report_at||0).getTime()||0;
+      const yt=new Date(communityReports.get(y.id)?.latest_report_at||0).getTime()||0;
+      return yt-xt || x.name.localeCompare(y.name);
+    });
   }else{
     a.sort((x,y)=>x.name.localeCompare(y.name));
   }
   return a;
 }
-function communityReportHtml(id){
+function reportAge(report){
+ if(!report?.latest_report_at)return '';
+ const hours=Math.max(0,Math.floor((Date.now()-new Date(report.latest_report_at).getTime())/3600000));
+ if(hours<1)return 'now';
+ if(hours<48)return `${hours} hr${hours===1?'':'s'} ago`;
+ const days=Math.max(2,Math.floor(hours/24));
+ return `${days} day${days===1?'':'s'} ago`;
+}
+function communityReportHeading(id){
  const report=communityReports.get(id);
- if(!report||!Number(report.total_reports)){
-  return '<div class="community-tally"><strong>Community reports — last 48 hr</strong><span>No recent rider reports.</span></div>';
- }
- const labels=['Absolutely','Yes — a few wet spots','Rideable — expect mud',"I'd wait",'Closed'];
- const recommendations=labels
-  .filter(label=>Number(report.recommendations?.[label]))
-  .map(label=>`<span><b>${Number(report.recommendations[label])}</b> ${escapeHtml(label)}</span>`)
-  .join('');
- const observations=Object.entries(report.observations||{})
-  .filter(([,count])=>Number(count))
-  .sort((a,b)=>Number(b[1])-Number(a[1]))
-  .map(([label,count])=>`<span><b>${Number(count)}</b> ${escapeHtml(label)}</span>`)
-  .join('');
- const latest=report.latest_report_at?new Date(report.latest_report_at).toLocaleString():'Unknown';
- return `<div class="community-tally"><strong>Community reports — last 48 hr</strong><span>${Number(report.total_reports)} recent rider report${Number(report.total_reports)===1?'':'s'} · latest ${latest}</span>${recommendations?`<div class="community-counts">${recommendations}</div>`:''}${observations?`<small>Observations</small><div class="community-counts observations">${observations}</div>`:''}</div>`;
+ const total=Number(report?.total_reports)||0;
+ if(!total)return {title:'Community Reports',summary:'Be the first to report conditions.'};
+ const counts=report.recommendations||{};
+ const labels=[
+  ['Absolutely','Absolutely'],
+  ['Yes — a few wet spots','A few wet spots'],
+  ['Rideable — expect mud','Expect mud'],
+  ["I'd wait","I'd wait"],
+  ['Closed','Closed']
+ ];
+ const summary=labels
+  .filter(([value])=>Number(counts[value]))
+  .map(([value,label])=>`${Number(counts[value])} ${label}`)
+  .join(' · ');
+ const age=reportAge(report);
+ return {title:`Community Reports${age?` — ${age}`:''}`,summary:summary||`${total} recent report${total===1?'':'s'}`};
 }
 function selectTrail(id,{moveMap=true,scrollCard=false}={}){
   const trail=results.find(r=>r.id===id);
@@ -787,14 +818,13 @@ function render(){
   if(userLocation){
     results=results.map(r=>({...r,distance:currentDistance(r)}));
   }
-  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div><div class="fact"><b>${r.ready}</b><span>ready in</span></div></div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div>${trailCharacteristics(r)}<div class="explain">${r.weatherError?'Live weather could not be loaded for this trail. ':''}${r.rainWarning||''}${r.weatherError?'':'Humidity '+Math.round(r.humidity)+'%, wind '+Math.round(r.wind)+' mph.'}</div>${rainfallDiagnosticsPanel(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div><div class="community">
+  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div>${readyFactHtml(r.ready)}</div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div><div class="explain">${r.weatherError?'Live weather could not be loaded for this trail. ':''}${r.rainWarning||''}${r.weatherError?'':'Humidity '+Math.round(r.humidity)+'%, wind '+Math.round(r.wind)+' mph.'}</div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
 <button type="button" class="report-toggle" data-report-toggle="${r.id}" aria-expanded="false">
-  <span>${vote?'Update your trail report':'Report trail conditions'}${communityReports.get(r.id)?` · ${Number(communityReports.get(r.id).total_reports)} recent`:''}</span>
+  <span><b>${communityHeading.title}</b><small>${communityHeading.summary}</small></span>
   <span class="chev">⌄</span>
 </button>
 <div class="report-panel" data-report-panel="${r.id}">
-  ${communityReportHtml(r.id)}
-  <div class="community-title"><span>Your overall ride recommendation <small style="font-weight:500;color:var(--muted)">(choose one)</small></span><span>${vote?'Shared with everyone':'No report yet'}</span></div>
+  <div class="community-title">Would you ride it?</div>
   <div class="vote-buttons" data-id="${r.id}" role="radiogroup" aria-label="Overall ride recommendation">
   ${[
   ['Absolutely','Great conditions. Worth the drive.'],
@@ -802,15 +832,15 @@ function render(){
   ['Rideable — expect mud','Rideable, but expect cleanup afterward.'],
   ["I'd wait",'Too many wet or soft sections today.'],
   ['Closed','Officially closed or should not be ridden.']
-  ].map(([v,tip])=>`<button type="button" data-vote="${v}" role="radio" aria-checked="${vote&&vote.value===v?'true':'false'}" title="${tip}" class="${vote&&vote.value===v?'selected':''}">${v}</button>`).join('')}
+  ].map(([v,tip])=>`<button type="button" data-vote="${v}" role="radio" aria-checked="${vote&&vote.value===v?'true':'false'}" title="${tip}" class="${vote&&vote.value===v?'selected':''}">${v==='Yes — a few wet spots'?'A few wet spots':v==='Rideable — expect mud'?'Expect mud':v}</button>`).join('')}
   </div>
   <div class="observation-wrap" data-observe-id="${r.id}">
-    <div class="observation-label">Additional observations <span style="font-weight:500">(choose any that apply)</span></div>
+    <div class="observation-label">What did you notice?</div>
     <div class="observation-buttons">
     ${['A few puddles','Frequent puddles','Tires picked up mud','Soft sections','Creek crossings high','Fallen trees','Trail maintenance','Dusty','Perfect traction'].map(o=>`<button type="button" data-observation="${o}" aria-pressed="${vote&&Array.isArray(vote.observations)&&vote.observations.includes(o)?'true':'false'}" class="${vote&&Array.isArray(vote.observations)&&vote.observations.includes(o)?'selected':''}">${o}</button>`).join('')}
     </div>
   </div>
-  <div class="community-result">${vote?`You reported: ${vote.value||'No recommendation'}${vote.observations&&vote.observations.length?'. '+vote.observations.join(', '):''}`:'Choose one overall recommendation, then select any additional observations that apply.'}${vote?`<button type="button" class="remove-report" data-remove-report="${r.id}">Remove my report</button>`:''}</div>
+  ${vote?`<div class="community-result"><span>Saved and shared</span><button type="button" class="remove-report" data-remove-report="${r.id}">Remove my report</button></div>`:''}
 </div>
 </div></article>`}).join(''):'<div class="loading">No trails match.</div>';
 document.querySelectorAll('[data-select-trail]').forEach(btn=>btn.addEventListener('click',()=>selectTrail(btn.dataset.selectTrail,{moveMap:true,scrollCard:false})));
@@ -848,7 +878,7 @@ arr.forEach(r=>{
   markers.push(m);
 });
 if(selectedTrailId&&arr.some(r=>r.id===selectedTrailId))selectTrail(selectedTrailId,{moveMap:false,scrollCard:false});
-document.getElementById('goodCount').textContent=results.filter(r=>r.status.key==='green').length;const best=[...results].filter(r=>Number.isFinite(r.rideability)).sort((a,b)=>b.rideability-a.rideability)[0];document.getElementById('bestTrail').textContent=best?best.name:'–';const near=[...results].filter(r=>r.distance!=null).sort((a,b)=>a.distance-b.distance)[0];document.getElementById('nearestTrail').textContent=near?near.name:'Use location';setTimeout(()=>map.invalidateSize(),100)}
+document.getElementById('goodCount').textContent=results.filter(r=>r.status.key==='green').length;const best=[...results].filter(r=>Number.isFinite(r.rideability)).sort((a,b)=>b.rideability-a.rideability)[0],bestElement=document.getElementById('bestTrail');bestElement.textContent=best?best.name:'–';bestElement.title=best?best.name:'';const near=[...results].filter(r=>r.distance!=null).sort((a,b)=>a.distance-b.distance)[0],nearElement=document.getElementById('nearestTrail');nearElement.textContent=near?near.name:'Use location';nearElement.title=near?near.name:'';setTimeout(()=>map.invalidateSize(),100)}
 async function load(focusTrail=null){
   document.getElementById('trailList').innerHTML='<div class="loading">Loading live weather for Ohio trails…</div>';
   await loadSharedData();
@@ -886,7 +916,7 @@ async function load(focusTrail=null){
 
   if(focusTrail)selectTrail(focusTrail.id,{moveMap:true,scrollCard:false});
 }
-function locate(){const b=document.getElementById('locate');if(!navigator.geolocation){alert('Location is not supported in this browser.');return}b.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{userLocation={lat:pos.coords.latitude,lon:pos.coords.longitude};results=results.map(r=>({...r,distance:haversine(userLocation.lat,userLocation.lon,r.lat,r.lon)}));if(userMarker)map.removeLayer(userMarker);userMarker=L.circleMarker([userLocation.lat,userLocation.lon],{radius:8,color:'#173f2a',fillColor:'#fff',fillOpacity:1,weight:3}).bindPopup('Your location').addTo(map);map.setView([userLocation.lat,userLocation.lon],8);b.textContent='Location enabled';document.getElementById('sort').value='distance';render()},()=>{b.textContent='Use my location';alert('Location was not shared.')})}
+function locate(){const b=document.getElementById('locate'),label=document.getElementById('nearestTrail');if(!navigator.geolocation){alert('Location is not supported in this browser.');return}b.disabled=true;label.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{userLocation={lat:pos.coords.latitude,lon:pos.coords.longitude};results=results.map(r=>({...r,distance:haversine(userLocation.lat,userLocation.lon,r.lat,r.lon)}));if(userMarker)map.removeLayer(userMarker);userMarker=L.circleMarker([userLocation.lat,userLocation.lon],{radius:8,color:'#173f2a',fillColor:'#fff',fillOpacity:1,weight:3}).bindPopup('Your location').addTo(map);map.setView([userLocation.lat,userLocation.lon],8);b.disabled=false;document.getElementById('sort').value='distance';render()},()=>{b.disabled=false;label.textContent='Use location';alert('Location was not shared.')})}
 function slug(s){return s.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'-'+Date.now().toString(36)}
 function clearExistingSelectOptions(){
  document.querySelectorAll('option[data-existing-value="true"]').forEach(option=>option.remove());
