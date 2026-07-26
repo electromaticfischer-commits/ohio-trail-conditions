@@ -1,5 +1,74 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V52 shared trails and community reports
+
+- Baseline: V51.
+- Loads 39 shared trail records from Supabase, including 3 newly added trails and 15 edited built-in trails from `ohio-trail-edits.json`.
+- Retains the packaged trail catalog as an automatic fallback if shared trail data cannot load.
+- Shares the existing overall recommendation and observation selections with every user; no account, email, name, comment, or location is collected.
+- Gives each browser one editable report per trail. Reopening the panel restores its selections; selecting a checked recommendation again clears it; `Remove my report` deletes the entire report.
+- Displays recommendation and observation tallies from the last 48 hours separately from the NOAA-calculated rating.
+- Community reports do not alter rainfall, rideability, readiness, or official-closure handling.
+
+V52 verification results:
+
+- Live Supabase API: 39 trails loaded; report save, reopen, update, public tally, removal, and post-removal verification passed.
+- Raw rider-report rows were not publicly readable, and an invalid recommendation was rejected.
+- Browser: all 39 cards loaded, including A.W.Marion, Starhill, and The Wilds.
+- Browser report workflow: `Absolutely` and `Perfect traction` were saved, restored after reopening, displayed in the public tally, and removed successfully.
+- The temporary browser and API test reports were removed.
+- No unavailable or unverified rainfall card displayed green.
+- No browser warnings or errors occurred.
+- JavaScript syntax, inline-script parity, shared-report integration, rainfall-aging, NOAA request-contract, and ZIP-integrity checks passed.
+- NOAA retrieval and condition-calculation source matched V51 exactly.
+- Live NOAA checks passed at Columbus, Cleveland, and Cincinnati for 12/24/48/72 hours at product time `2026-07-26T00:00:00Z`.
+
+Not changed:
+
+- NOAA point rainfall, 25-point weighting, 12/24-hour overlays, rainfall aging, rideability, readiness, safeguards, trail-card calculations, and official links.
+- Developer Mode catalog edits still save locally. Publishing future catalog edits to everyone requires updating the Supabase trail table.
+
+## V51 card cleanup
+
+- Baseline: V50.
+- Removes the trail-specific `Notes:` sentence from every condition card.
+- Keeps the rainfall sampling range, humidity, wind, source, and weather coordinates visible.
+- Displays `total rain` and `last 72 hr` as separate lines with consistent spacing.
+- Rainfall retrieval, rainfall aging, rideability, readiness, safeguards, trail data, overlays, and management behavior are unchanged from V50.
+
+V51 verification results:
+
+- All 36 cards loaded in the browser.
+- No card displayed a `Notes:` section.
+- The rain labels rendered as separate block lines with a 2-pixel gap.
+- No unavailable or unverified trail displayed green.
+- No browser warnings or errors occurred.
+- JavaScript syntax, inline-script syntax, rainfall-aging, NOAA request-contract, and ZIP-integrity checks passed.
+
+## V50 rainfall-aging calibration
+
+- Baseline: V49.
+- Replaces overlapping 12/24/48/72-hour rain penalties with four non-overlapping age bands: 0–12, 12–24, 24–48, and 48–72 hours.
+- Each rainfall amount is now counted once. Recent rain keeps the strongest penalty while older rain fades progressively.
+- The lingering-moisture penalty now follows the age of the rainfall instead of treating the entire 72-hour total as equally recent.
+- NOAA retrieval, 25-point weighting, missing-data safeguards, trail characteristics, status thresholds, weather drying inputs, cards, management tools, and overlays are unchanged.
+
+V50 verification results:
+
+- A simulated recent 0.50-inch storm remained likely wet, including at Alum Creek's higher rain sensitivity.
+- A simulated 0.50-inch storm occurring 24–48 hours earlier recovered to green under otherwise dry weather.
+- Missing or untrusted rainfall still withholds rideability and cannot produce green.
+- Live NOAA 12/24/48/72-hour requests succeeded at Columbus, Cleveland, and Cincinnati with valid monotonic totals and product time `2026-07-25T23:00:00Z`.
+- The independent weather comparison accepted the current dry NOAA fields.
+- Browser results: Alum Creek Phase 1 was green at 100%, Alum Creek Phase 2 was green at 98%, and Lake Hope was green at 100%.
+- All 36 trail cards loaded from NOAA MRMS with no unavailable cards, unsafe green cards, browser warnings, or browser errors.
+- JavaScript syntax, inline-script syntax, NOAA request-contract, rainfall-aging, and ZIP-integrity checks passed.
+
+Not verified:
+
+- No currently wet trail was available during the live browser test. Recent-wet behavior was therefore verified with a deterministic half-inch regression scenario.
+- Rider observations at additional trails are still needed to refine trail-specific sensitivity and drying factors.
+
 ## V49 valid-dry-field correction
 
 - A fully validated NOAA all-zero/dry field is now accepted when Open-Meteo also reports less than 0.005 inch over 72 hours.

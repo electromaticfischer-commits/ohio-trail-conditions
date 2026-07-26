@@ -22,11 +22,11 @@
 <button id="locate" class="primary" type="button">Use my location</button>
 <button id="manage" type="button" hidden>Manage trails</button>
 </div>
-<div class="notice">Predictions are advisory. Official closures always override the model. Trail edits and rider reports are saved only in this browser.</div>
+<div class="notice">Predictions are advisory. Official closures always override the model. Community reports are shared; Developer Mode trail edits remain local until published.</div>
 <div class="summary"><div class="metric"><b id="goodCount">–</b><span>Likely good</span></div><div class="metric"><b id="bestTrail">–</b><span>Best rideability</span></div><div class="metric"><b id="nearestTrail">–</b><span>Nearest trail</span></div><div class="metric"><b id="updated">–</b><span>Last refreshed</span></div></div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading live weather…</div></div></section></div>
 </main>
-<footer><span>Weather: Open-Meteo. Predictions are advisory.</span><span class="footer-tools"><span>v41.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v52.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="trailDialog">
 <div class="modal-head"><h2 id="trailDialogTitle">Manage trail catalog</h2><button id="closeDialog" type="button">Close</button></div>
@@ -102,6 +102,8 @@ const sensitivityLabels={".75":"Low",".9":"Medium-low","1":"Medium","1.15":"Medi
 const dryingLabels={".7":"Very slow",".85":"Slow","1":"Average","1.15":"Fast","1.3":"Very fast"};
 const canopyLabels={".35":"Open",".6":"Partial",".82":"Mostly shaded",".95":"Fully shaded"};
 const drainageFactors={"Very poor":.82,"Poor":.9,"Average":1,"Good":1.1,"Excellent":1.2,"All-weather":1.35};
+const SUPABASE_URL='https://woaqvcgrtvypifgxmtoh.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_qkvJh45ZskcVb_kSQ7dQUA_sAqOBfuU';
 function normalizeDrainage(value){
  const text=String(value||'').toLowerCase();
  if(text.includes('all-weather'))return 'All-weather';
@@ -120,10 +122,48 @@ let developerMode=readJSON('developerMode',false);
 let hiddenTrailIds=readJSON('hiddenTrailIds',[]);
 let deletedTrailIds=readJSON('deletedTrailIds',[]);
 let builtInOverrides=readJSON('builtInOverrides',{});
+let sharedTrails=null;
+let communityReports=new Map();
 function readJSON(k,f){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(e){return f}}
 function effectiveBaseTrail(t){return builtInOverrides[t.id]?{...t,...builtInOverrides[t.id],id:t.id}:t}
-function allManagedTrails(){return [...baseTrails.map(t=>({...effectiveBaseTrail(t),source:'Built-in'})),...customTrails.map(t=>({...t,source:'Custom'}))]}
+function allManagedTrails(){
+ const records=new Map((sharedTrails||baseTrails).map(t=>[t.id,{...t,source:sharedTrails?'Shared':'Built-in'}]));
+ baseTrails.forEach(t=>{if(builtInOverrides[t.id])records.set(t.id,{...t,...builtInOverrides[t.id],id:t.id,source:'Local edit'})});
+ customTrails.forEach(t=>records.set(t.id,{...t,source:'Local edit'}));
+ return [...records.values()];
+}
 function catalog(){return allManagedTrails().filter(t=>!hiddenTrailIds.includes(t.id)&&!deletedTrailIds.includes(t.id)&&!['Hidden','Archived','Permanently closed'].includes(t.recordStatus))}
+async function supabaseRpc(name,body={}){
+ const response=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{
+  method:'POST',
+  headers:{apikey:SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json'},
+  body:JSON.stringify(body)
+ });
+ const text=await response.text();
+ if(!response.ok)throw new Error(text||`Shared data request failed (HTTP ${response.status})`);
+ return text?JSON.parse(text):null;
+}
+function reporterToken(){
+ let token=localStorage.getItem('trailReporterToken');
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(token||'')){
+  token=crypto.randomUUID();
+  localStorage.setItem('trailReporterToken',token);
+ }
+ return token;
+}
+async function refreshCommunityReports(){
+ const rows=await supabaseRpc('get_community_trail_reports');
+ communityReports=new Map((rows||[]).map(row=>[row.trail_id,row]));
+}
+async function loadSharedData(){
+ try{
+  const [trailRows]=await Promise.all([supabaseRpc('get_ohio_trails'),refreshCommunityReports()]);
+  const loaded=(trailRows||[]).map(row=>row.data).filter(t=>t&&t.id);
+  if(loaded.length)sharedTrails=loaded;
+ }catch(error){
+  console.warn('Shared trail data is unavailable; using the packaged trail catalog.',error);
+ }
+}
 const map=L.map('map').setView([40.05,-82.75],7);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 let precipitationOverlay=null;
@@ -272,17 +312,52 @@ function validMrmsRainInches(value){
   return inches<=20?inches:null;
 }
 function getVotes(id){return readJSON('trailVote:'+id,null)}
+async function persistVote(id,value,observations){
+ const cleanObservations=Array.isArray(observations)?observations:[];
+ try{
+  if(!value&&!cleanObservations.length){
+   await supabaseRpc('remove_my_trail_report',{p_trail_id:id,p_reporter_token:reporterToken()});
+   localStorage.removeItem('trailVote:'+id);
+  }else{
+   await supabaseRpc('save_my_trail_report',{
+    p_trail_id:id,p_reporter_token:reporterToken(),
+    p_recommendation:value||null,p_observations:cleanObservations
+   });
+   localStorage.setItem('trailVote:'+id,JSON.stringify({value:value||null,observations:cleanObservations,time:Date.now()}));
+  }
+  await refreshCommunityReports();
+  render();reopenReport(id);
+ }catch(error){
+  console.error('Could not save the shared trail report',error);
+  alert('Your report could not be saved. Please check your connection and try again.');
+ }
+}
 function saveVote(id,value){
- const current=getVotes(id)||{};
- localStorage.setItem('trailVote:'+id,JSON.stringify({value,observations:current.observations||[],time:Date.now()}));
- render(); reopenReport(id)
+ const current=getVotes(id)||{value:null,observations:[]};
+ persistVote(id,current.value===value?null:value,current.observations||[]);
 }
 function toggleObservation(id,observation){
  const current=getVotes(id)||{value:null,observations:[]};
  const observations=Array.isArray(current.observations)?[...current.observations]:[];
  const next=observations.includes(observation)?observations.filter(x=>x!==observation):[...observations,observation];
- localStorage.setItem('trailVote:'+id,JSON.stringify({value:current.value,observations:next,time:Date.now()}));
- render(); reopenReport(id)
+ persistVote(id,current.value,next);
+}
+function removeVote(id){persistVote(id,null,[])}
+async function syncMyReport(id){
+ try{
+  const rows=await supabaseRpc('get_my_trail_report',{p_trail_id:id,p_reporter_token:reporterToken()});
+  if(rows&&rows[0]){
+   localStorage.setItem('trailVote:'+id,JSON.stringify({
+    value:rows[0].recommendation||null,
+    observations:rows[0].observations||[],
+    time:new Date(rows[0].updated_at).getTime()
+   }));
+  }else localStorage.removeItem('trailVote:'+id);
+  render();reopenReport(id);
+ }catch(error){
+  console.warn('Could not refresh this browser’s trail report',error);
+  reopenReport(id);
+ }
 }
 function reopenReport(id){
  requestAnimationFrame(()=>{
@@ -402,7 +477,9 @@ async function fetchMrmsCatalog(){
   if(mrmsCatalogCache&&Date.now()-mrmsCatalogCache.savedAt<MRMS_CATALOG_CACHE_MS)return mrmsCatalogCache.products;
   const names=Object.values(MRMS_PRODUCTS);
   const where=names.map(name=>`idp_subset = '${name}'`).join(' OR ');
-  const params=new URLSearchParams({f:'json',where,outFields:'objectid,name,idp_subset,idp_filedate,idp_validendtime',returnGeometry:'false'});
+  const params=new URLSearchParams({
+    f:'json',where,outFields:'objectid,name,idp_subset,idp_filedate,idp_validendtime',returnGeometry:'false'
+  });
   const response=await fetch(`${MRMS_CATALOG_URL}?${params.toString()}`);
   if(!response.ok)throw new Error(`MRMS catalog request failed (HTTP ${response.status})`);
   const data=await response.json();
@@ -588,8 +665,13 @@ async function fetchTrail(t){
   const drainage=normalizeDrainage(t.drainage);
   const effectiveDrying=drying*(drainageFactors[drainage]||1);
   const mm12=r12*25.4, mm24=r24*25.4, mm48=r48*25.4, mm72=r72*25.4;
-  const rain=(mm12*5+mm24*2.4+mm48*.8+mm72*.25)*sensitivity;
-  const sat=Math.min(22,mm72*.75*sensitivity);
+  const rain0to12=mm12;
+  const rain12to24=Math.max(0,mm24-mm12);
+  const rain24to48=Math.max(0,mm48-mm24);
+  const rain48to72=Math.max(0,mm72-mm48);
+  const rain=(rain0to12*5+rain12to24*2.4+rain24to48*.8+rain48to72*.25)*sensitivity;
+  const lingeringMoisture=rain0to12+rain12to24*.75+rain24to48*.4+rain48to72*.15;
+  const sat=Math.min(22,lingeringMoisture*.75*sensitivity);
   const hp=Math.max(0,(hum-68)*.28)*canopy;
   const cp=Math.max(0,(cloud-55)*.08)*canopy;
   const dry=(Math.max(0,wind-3)*.55+Math.max(0,temp-55)*.16)*effectiveDrying;
@@ -685,6 +767,24 @@ function sortedFiltered(){
   }
   return a;
 }
+function communityReportHtml(id){
+ const report=communityReports.get(id);
+ if(!report||!Number(report.total_reports)){
+  return '<div class="community-tally"><strong>Community reports — last 48 hr</strong><span>No recent rider reports.</span></div>';
+ }
+ const labels=['Absolutely','Yes — a few wet spots','Rideable — expect mud',"I'd wait",'Closed'];
+ const recommendations=labels
+  .filter(label=>Number(report.recommendations?.[label]))
+  .map(label=>`<span><b>${Number(report.recommendations[label])}</b> ${escapeHtml(label)}</span>`)
+  .join('');
+ const observations=Object.entries(report.observations||{})
+  .filter(([,count])=>Number(count))
+  .sort((a,b)=>Number(b[1])-Number(a[1]))
+  .map(([label,count])=>`<span><b>${Number(count)}</b> ${escapeHtml(label)}</span>`)
+  .join('');
+ const latest=report.latest_report_at?new Date(report.latest_report_at).toLocaleString():'Unknown';
+ return `<div class="community-tally"><strong>Community reports — last 48 hr</strong><span>${Number(report.total_reports)} recent rider report${Number(report.total_reports)===1?'':'s'} · latest ${latest}</span>${recommendations?`<div class="community-counts">${recommendations}</div>`:''}${observations?`<small>Observations</small><div class="community-counts observations">${observations}</div>`:''}</div>`;
+}
 function selectTrail(id,{moveMap=true,scrollCard=false}={}){
   const trail=results.find(r=>r.id===id);
   if(!trail)return;
@@ -715,13 +815,14 @@ function render(){
   if(userLocation){
     results=results.map(r=>({...r,distance:currentDistance(r)}));
   }
-  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div><div class="fact"><b>${r.ready}</b><span>ready in</span></div></div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div>${trailCharacteristics(r)}<div class="explain">${r.weatherError?'Live weather could not be loaded for this trail. ':''}${r.rainWarning||''}${r.note?'<b>Notes:</b> '+r.note+' ':''}${r.weatherError?'':'Rainfall sampled across a '+r.rainSampleRadius+'-mile trail area. 24-hour range: '+formatInches(r.rain24Min)+'–'+formatInches(r.rain24Max)+'. Humidity '+Math.round(r.humidity)+'%, wind '+Math.round(r.wind)+' mph. Rain source: '+(r.rainSource||'unknown')+'. Weather center: '+trailWeatherLat(r).toFixed(4)+', '+trailWeatherLon(r).toFixed(4)+'.'}</div>${rainfallDiagnosticsPanel(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div><div class="community">
+  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div><div class="fact"><b>${r.ready}</b><span>ready in</span></div></div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div>${trailCharacteristics(r)}<div class="explain">${r.weatherError?'Live weather could not be loaded for this trail. ':''}${r.rainWarning||''}${r.weatherError?'':'Rainfall sampled across a '+r.rainSampleRadius+'-mile trail area. 24-hour range: '+formatInches(r.rain24Min)+'–'+formatInches(r.rain24Max)+'. Humidity '+Math.round(r.humidity)+'%, wind '+Math.round(r.wind)+' mph. Rain source: '+(r.rainSource||'unknown')+'. Weather center: '+trailWeatherLat(r).toFixed(4)+', '+trailWeatherLon(r).toFixed(4)+'.'}</div>${rainfallDiagnosticsPanel(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div><div class="community">
 <button type="button" class="report-toggle" data-report-toggle="${r.id}" aria-expanded="false">
-  <span>${vote?'Update your trail report':'Report trail conditions'}</span>
+  <span>${vote?'Update your trail report':'Report trail conditions'}${communityReports.get(r.id)?` · ${Number(communityReports.get(r.id).total_reports)} recent`:''}</span>
   <span class="chev">⌄</span>
 </button>
 <div class="report-panel" data-report-panel="${r.id}">
-  <div class="community-title"><span>Overall ride recommendation <small style="font-weight:500;color:var(--muted)">(choose one)</small></span><span>${vote?'Saved on this device':'No report yet'}</span></div>
+  ${communityReportHtml(r.id)}
+  <div class="community-title"><span>Your overall ride recommendation <small style="font-weight:500;color:var(--muted)">(choose one)</small></span><span>${vote?'Shared with everyone':'No report yet'}</span></div>
   <div class="vote-buttons" data-id="${r.id}" role="radiogroup" aria-label="Overall ride recommendation">
   ${[
   ['Absolutely','Great conditions. Worth the drive.'],
@@ -737,18 +838,20 @@ function render(){
     ${['A few puddles','Frequent puddles','Tires picked up mud','Soft sections','Creek crossings high','Fallen trees','Trail maintenance','Dusty','Perfect traction'].map(o=>`<button type="button" data-observation="${o}" aria-pressed="${vote&&Array.isArray(vote.observations)&&vote.observations.includes(o)?'true':'false'}" class="${vote&&Array.isArray(vote.observations)&&vote.observations.includes(o)?'selected':''}">${o}</button>`).join('')}
     </div>
   </div>
-  <div class="community-result">${vote?`You reported: ${vote.value||'No recommendation'}${vote.observations&&vote.observations.length?'. '+vote.observations.join(', '):''}`:'Choose one overall recommendation, then select any additional observations that apply.'}</div>
+  <div class="community-result">${vote?`You reported: ${vote.value||'No recommendation'}${vote.observations&&vote.observations.length?'. '+vote.observations.join(', '):''}`:'Choose one overall recommendation, then select any additional observations that apply.'}${vote?`<button type="button" class="remove-report" data-remove-report="${r.id}">Remove my report</button>`:''}</div>
 </div>
 </div></article>`}).join(''):'<div class="loading">No trails match.</div>';
 document.querySelectorAll('[data-select-trail]').forEach(btn=>btn.addEventListener('click',()=>selectTrail(btn.dataset.selectTrail,{moveMap:true,scrollCard:false})));
 document.querySelectorAll('[data-vote]').forEach(b=>b.addEventListener('click',()=>saveVote(b.closest('[data-id]').dataset.id,b.dataset.vote)));
 document.querySelectorAll('[data-observation]').forEach(b=>b.addEventListener('click',()=>toggleObservation(b.closest('[data-observe-id]').dataset.observeId,b.dataset.observation)));
+document.querySelectorAll('[data-remove-report]').forEach(b=>b.addEventListener('click',()=>removeVote(b.dataset.removeReport)));
 document.querySelectorAll('[data-report-toggle]').forEach(btn=>btn.addEventListener('click',()=>{
   const id=btn.dataset.reportToggle;
   const panel=document.querySelector(`[data-report-panel="${id}"]`);
   const open=!panel.classList.contains('open');
   panel.classList.toggle('open',open);
   btn.setAttribute('aria-expanded',String(open));
+  if(open)syncMyReport(id);
 }));
 markers.forEach(m=>map.removeLayer(m));markers=[];
 arr.forEach(r=>{
@@ -776,6 +879,7 @@ if(selectedTrailId&&arr.some(r=>r.id===selectedTrailId))selectTrail(selectedTrai
 document.getElementById('goodCount').textContent=results.filter(r=>r.status.key==='green').length;const best=[...results].filter(r=>Number.isFinite(r.rideability)).sort((a,b)=>b.rideability-a.rideability)[0];document.getElementById('bestTrail').textContent=best?best.name:'–';const near=[...results].filter(r=>r.distance!=null).sort((a,b)=>a.distance-b.distance)[0];document.getElementById('nearestTrail').textContent=near?near.name:'Use location';setTimeout(()=>map.invalidateSize(),100)}
 async function load(focusTrail=null){
   document.getElementById('trailList').innerHTML='<div class="loading">Loading live weather for Ohio trails…</div>';
+  await loadSharedData();
   const trails=catalog();
   const settled=await Promise.allSettled(trails.map(fetchTrail));
 
