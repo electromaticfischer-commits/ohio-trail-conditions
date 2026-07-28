@@ -39,8 +39,9 @@ security definer
 set search_path = public
 as $$
 declare
-  trail_id text := nullif(trim(p_data->>'id'), '');
-  trail_name text := nullif(trim(p_data->>'name'), '');
+  clean_data jsonb := p_data - 'surface' - 'surfaces' - 'drying' - 'drainage';
+  trail_id text := nullif(trim(clean_data->>'id'), '');
+  trail_name text := nullif(trim(clean_data->>'name'), '');
   trail_lat double precision;
   trail_lon double precision;
 begin
@@ -51,8 +52,8 @@ begin
     raise exception 'Trail ID and name are required';
   end if;
   begin
-    trail_lat := (p_data->>'lat')::double precision;
-    trail_lon := (p_data->>'lon')::double precision;
+    trail_lat := (clean_data->>'lat')::double precision;
+    trail_lon := (clean_data->>'lon')::double precision;
   exception when others then
     raise exception 'Valid trail coordinates are required';
   end;
@@ -61,14 +62,14 @@ begin
   end if;
 
   insert into public.ohio_trails (id, data, updated_at, updated_by)
-  values (trail_id, p_data, now(), (select auth.uid()))
+  values (trail_id, clean_data, now(), (select auth.uid()))
   on conflict (id)
   do update set
     data = excluded.data,
     updated_at = now(),
     updated_by = (select auth.uid());
 
-  return p_data;
+  return clean_data;
 end;
 $$;
 

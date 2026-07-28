@@ -1,5 +1,147 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V68 sticky rider observations
+
+Baseline: V67.
+
+- Keeps `Trail maintenance` as a supported rider observation.
+- Updates the anonymous rider's local report immediately after every click.
+- Serializes rapid report changes per trail so an older request cannot
+  overwrite a newer combination.
+- Each rapid click now builds on the newest local selections.
+- If sharing fails, the selections remain saved in that browser and the user
+  receives an accurate message that sharing did not complete.
+- Community warning summaries still prioritize fallen trees, trail
+  maintenance, and high creek crossings.
+
+V68 verification:
+
+- A controlled rapid-click test selected Fallen trees, Trail maintenance, and
+  Perfect traction without waiting between clicks.
+- All three were immediately present in the local report.
+- The three database requests ran one at a time.
+- The final shared payload contained all three observations.
+- Community alert, shared-report, rainfall safeguard, and NOAA request-contract
+  regression tests passed.
+- JavaScript source and inline-script syntax passed.
+
+## V67 researched soil is authoritative
+
+Baseline: V66.
+
+V67 removes the manually guessed `surface`, `surfaces`, `drying`, and
+`drainage` fields. Names, access and weather coordinates, links, canopy, rain
+sensitivity, notes, status, administration data, and rider reports are
+preserved.
+
+- Refreshed USDA SSURGO research using the corrected live Supabase coordinates.
+- Expanded coverage from 36 built-in trails to all 39 currently shared trails,
+  including A.W. Marion, Starhill, and The Wilds.
+- Research is now the sole natural-soil/drying source.
+- Developer Mode no longer asks for surface, drainage, or drying guesses.
+- A future trail without a researched profile receives a neutral soil factor
+  rather than inheriting a guessed value.
+- Mountwood's sparse federal coverage is still labeled Low confidence and now
+  receives the neutral factor instead of its former guessed factor.
+- Purpose-built construction adjustments remain separate from natural soil.
+- Added `supabase/v67-remove-guessed-soil.sql` for the one-time shared-database
+  cleanup. It removes only the four obsolete keys.
+- Updated the administrator save function so future edits cannot restore those
+  obsolete keys.
+
+V67 verification:
+
+- 39/39 live shared trail coordinates were sampled.
+- 38/39 profiles had adequate area coverage; Mountwood remained Low confidence.
+- All 36 packaged records contain zero guessed soil fields.
+- All three soil controls were removed from Developer Mode.
+- The database cleanup targets only the four obsolete JSON keys.
+- The controlled two-inch storm safeguard passed for every packaged trail.
+- Missing-rain safeguards remain present and unchanged.
+- JavaScript source and inline-script syntax passed.
+
+## V66 researched soil-aware drying
+
+Baseline: V65.
+
+V66 intentionally changes only the modeled drying adjustment. Measured NOAA
+rainfall, rainfall weighting, humidity/wind/temperature inputs, rideability
+thresholds, readiness formula, trail cards, reports, map, and administration
+behavior retain their V65 logic.
+
+### What changed
+
+- Added a USDA NRCS SSURGO soil profile for all 36 built-in trail systems.
+- Sampled 17 mapped points around each trail center: the center plus eight
+  compass points at 0.5 mile and 1 mile.
+- Stored dominant/secondary surface texture, natural drainage, confidence,
+  coverage, and a soil drying factor.
+- Replaced the previous subjective `drying × drainage` natural-soil adjustment
+  with one documented coefficient: 65% surface texture behavior plus 35% NRCS
+  natural drainage class, bounded to 0.65–1.30.
+- The coefficient changes modeled drying only. It never changes measured rain.
+- Retained a separate, bounded construction advantage for the existing
+  purpose-built/all-weather systems.
+- Mountwood has only 1/17 usable SSURGO samples; it is labeled Low confidence
+  and continues to use its V65 drying value.
+- Trail Information now shows mapped soil, natural drainage, soil confidence,
+  rain sensitivity, and canopy.
+
+Research audit files:
+
+- `data/trail-soil-profiles.json`
+- `data/trail-soil-usda-raw.json`
+
+Authoritative sources:
+
+- USDA NRCS SSURGO: https://www.nrcs.usda.gov/resources/data-and-reports/soil-survey-geographic-database-ssurgo
+- USDA Soil Data Access: https://sdmdataaccess.nrcs.usda.gov/
+- Soil Data Access web-service documentation: https://sdmdataaccess.nrcs.usda.gov/WebServiceHelp.aspx
+
+### V66 test report
+
+- USDA lookup: 36/36 built-in trails returned mapped data; 35/36 had enough
+  surrounding usable samples for the new factor.
+- Profile regression: 36/36 profiles present; all coefficients within the
+  documented bounds.
+- Known profile checks passed: Lake Hope sandy loam and Oak Openings sand are
+  faster; Alum Phase 2 silt loam/poor drainage and Mount Airy clay loam are
+  slower.
+- Severe-storm safeguard passed: every built-in trail remains Likely wet after
+  a controlled 2-inch recent-rain scenario.
+- Missing-rain safeguard passed: unavailable rainfall still withholds
+  rideability and displays Rain data unavailable.
+- Rainfall equation comparison passed: V65 and V66 rainfall weighting is
+  identical.
+- JavaScript source and inline-script syntax passed.
+- Direct NOAA checks passed at product time `2026-07-28T16:00:00Z` for all
+  12/24/48/72-hour periods at Columbus, Cleveland, and Cincinnati. Every
+  response was HTTP 200, returned the locked duration-specific raster, had a
+  valid numeric millimeter sample, converted to inches, and satisfied rolling
+  total ordering. Point totals were Columbus 1.00", Cleveland 0.07", and
+  Cincinnati 0.00"/0.19"/0.19"/0.20".
+- Independent comparison: Open-Meteo's Columbus grid totaled about 0.33" over
+  the comparable recent period versus NOAA's 1.00" point value. This material
+  disagreement is documented rather than treated as proof that either source
+  is exact; the existing V65 source-disagreement safeguard remains unchanged.
+- Live browser load passed: all 39 currently shared trail cards rendered; none
+  showed Rain data unavailable; measurable recent storms remained wet where
+  appropriate; the soil details remained collapsed under Trail Information.
+- Same-weather V65/V66 comparison after NOAA's hourly catalog rollover: 30
+  cards had identical displayed rideability; nine differed by only one or two
+  percentage points; no condition color changed. Current heavy rainfall
+  correctly dominates the comparatively modest soil drying adjustment.
+- During the exact hourly NOAA catalog rollover, the first browser load
+  temporarily used the existing Open-Meteo fallback because no unique 12-hour
+  raster was available. A reload after the rollover completed had no browser
+  warnings and returned the normal NOAA-backed values. This inherited source
+  behavior was documented but not changed in this soil-only build.
+
+Known limitation: SSURGO describes mapped natural soils, not the exact trail
+tread, imported aggregate, compaction, drainage work, or every ridge/hollow
+within a large trail system. Community reports and official closures should
+continue to override the prediction.
+
 ## V65 weather-card accuracy and cleanup
 
 - Baseline: V64.

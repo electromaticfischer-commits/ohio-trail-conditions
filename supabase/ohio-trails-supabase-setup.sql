@@ -266,4 +266,15 @@ values
 on conflict (id)
 do update set data = excluded.data, updated_at = now();
 
+-- Soil texture, natural drainage, and drying factors are researched and
+-- packaged with V67. Remove the earlier manually guessed fields while keeping
+-- every other catalog edit intact.
+update public.ohio_trails
+set data = data - 'surface' - 'surfaces' - 'drying' - 'drainage'
+where
+  data ? 'surface'
+  or data ? 'surfaces'
+  or data ? 'drying'
+  or data ? 'drainage';
+
 commit;
