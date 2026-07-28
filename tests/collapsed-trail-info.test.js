@@ -20,8 +20,8 @@ assert.strictEqual(
   'Condition calculations changed from V57'
 );
 assert.strictEqual(
-  section(source, 'const MRMS_SERVICE_URL', 'function escapeHtml'),
-  section(previous, 'const MRMS_SERVICE_URL', 'function escapeHtml'),
+  section(source, 'const MRMS_SERVICE_URL', 'async function fetchOpenMeteo'),
+  section(previous, 'const MRMS_SERVICE_URL', 'async function fetchOpenMeteo'),
   'NOAA retrieval changed from V57'
 );
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');

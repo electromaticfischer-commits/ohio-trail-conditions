@@ -18,8 +18,8 @@ assert.strictEqual(
   'Status calculation changed from V56'
 );
 assert.strictEqual(
-  section(source, 'const MRMS_SERVICE_URL', 'function escapeHtml'),
-  section(previous, 'const MRMS_SERVICE_URL', 'function escapeHtml'),
+  section(source, 'const MRMS_SERVICE_URL', 'async function fetchOpenMeteo'),
+  section(previous, 'const MRMS_SERVICE_URL', 'async function fetchOpenMeteo'),
   'NOAA retrieval or condition calculations changed from V56'
 );
 assert(source.includes("if(value<48)return `${value} hr ago`"));

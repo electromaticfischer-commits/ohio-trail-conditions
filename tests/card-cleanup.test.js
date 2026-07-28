@@ -18,15 +18,15 @@ assert.strictEqual(
   'Status thresholds or unit handling changed from V53'
 );
 assert.strictEqual(
-  section(source, 'const MRMS_SERVICE_URL', 'function escapeHtml'),
-  section(previous, 'const MRMS_SERVICE_URL', 'function escapeHtml'),
+  section(source, 'const MRMS_SERVICE_URL', 'async function fetchOpenMeteo'),
+  section(previous, 'const MRMS_SERVICE_URL', 'async function fetchOpenMeteo'),
   'NOAA retrieval or condition calculations changed from V53'
 );
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert(!source.includes("'Rainfall sampled across a '"), 'Technical rainfall paragraph is still rendered on cards');
 assert(!source.includes("'. Weather center: '+"), 'Weather-center paragraph is still rendered on cards');
-assert(source.includes("'Humidity '+Math.round(r.humidity)+'%, wind '+Math.round(r.wind)+' mph.'"), 'Short humidity and wind line is missing');
-assert(source.includes("r.rainWarning||''"), 'Important card warnings must remain visible');
+assert(source.includes('Temperature ${Math.round(r.temperature)}°F, humidity ${Math.round(r.humidity)}%, wind ${Math.round(r.wind)} mph.'), 'Temperature, humidity, and wind line is missing');
+assert(!source.includes("<div class=\"explain\">${r.weatherError?'Live weather"), 'NOAA/source messages remain on normal cards');
 assert.doesNotThrow(() => new Function(inline), 'Inline application script must have valid JavaScript syntax');
 
 console.log('Card-cleanup regression tests passed.');

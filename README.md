@@ -1,5 +1,24 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V65 weather-card accuracy and cleanup
+
+- Baseline: V64.
+- Uses NOAA's rolling 12/24/48/72-hour bands for the displayed last-rain age whenever NOAA supplies the rainfall total.
+- Prevents a NOAA total from being paired with an unrelated Open-Meteo last-rain label.
+- Normal cards display only temperature, humidity, and wind; NOAA/source comparison messages remain available only in Developer diagnostics.
+- Adds the latest available hourly temperature from the existing Open-Meteo response.
+- Rainfall totals, rideability calculations, safeguards, community reports, and map behavior are unchanged.
+
+V65 verification results:
+
+- Browser live audit: all 39 trail cards loaded; none displayed unavailable rainfall.
+- Great Seal displayed `Within 12 hr`, 0.92 inches over 72 hours, `Likely wet`, and approximately two days until ready.
+- No card paired `3+ days ago` with measurable NOAA 72-hour rainfall after the correction.
+- Normal cards contained no NOAA, radar, Open-Meteo, or source-comparison wording.
+- Normal cards displayed temperature, humidity, and wind; Great Seal displayed 72°F, 88%, and 7 mph during the audit.
+- Direct NOAA checks passed for 12/24/48/72 hours at Columbus, Cleveland, and Cincinnati at product time `2026-07-28T13:00:00Z`, with valid numeric and monotonic totals.
+- The browser produced no warnings or errors during the 39-trail audit.
+
 ## V64 community count formatting
 
 - Baseline: V63.

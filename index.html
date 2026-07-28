@@ -25,7 +25,7 @@
 </div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading live weather…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v64.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v65.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="adminLoginDialog" class="login-dialog">
 <div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
@@ -677,6 +677,15 @@ function rainfallFromHourly(hourly){
   const r72=sumRange(hourly.precipitation,hourly.time,72);
   return {r12,r24,r48,r72,r24Min:r24,r24Max:r24,r72Min:r72,r72Max:r72,sampleRadius:0,sampleCount:1,lastRain:lastRainLabel(hourly.precipitation,hourly.time)};
 }
+function mrmsLastRainLabel(rainfall,fallbackLabel){
+  const r12=Number(rainfall?.r12)||0,r24=Number(rainfall?.r24)||0,r48=Number(rainfall?.r48)||0,r72=Number(rainfall?.r72)||0;
+  const threshold=.005;
+  if(r12>=threshold)return 'Within 12 hr';
+  if(r24-r12>=threshold)return '12–24 hr ago';
+  if(r48-r24>=threshold)return '1–2 days ago';
+  if(r72-r48>=threshold)return '2–3 days ago';
+  return fallbackLabel||'3+ days ago';
+}
 
 async function fetchTrail(t){
   const h=await fetchOpenMeteo(t);
@@ -702,7 +711,7 @@ async function fetchTrail(t){
     const comparisonWarning=sourceDisagreement(mrmsRainfall,fallback);
 
     if(!problem){
-      rainfall={...mrmsRainfall,lastRain:fallback.lastRain};
+      rainfall={...mrmsRainfall,lastRain:mrmsLastRainLabel(mrmsRainfall,fallback.lastRain)};
       rainSource='NOAA MRMS radar · distance-weighted 5-mile sampling';
       if(comparisonWarning){
         rainWarning='NOAA radar and Open-Meteo differ substantially; valid NOAA radar data is being used as the primary source. ';
@@ -710,7 +719,7 @@ async function fetchTrail(t){
       }
       writeMrmsCache(t.id,rainfall);
     }else if(cached&&cacheAge<=MRMS_ZERO_HOLD_MS&&meaningfulRain(cached)){
-      rainfall={...cached,lastRain:cached.lastRain||fallback.lastRain};
+      rainfall={...cached,lastRain:mrmsLastRainLabel(cached,cached.lastRain||fallback.lastRain)};
       rainSource='Last trustworthy NOAA MRMS reading';
       rainDataUncertain=true;
       const ageMinutes=Math.max(1,Math.round(cacheAge/60000));
@@ -733,7 +742,7 @@ async function fetchTrail(t){
   }catch(error){
     rainDiagnostics={ok:false,updatedAt:new Date().toISOString(),error:String(error?.message||error)};
     if(cached&&cacheAge<=MRMS_ZERO_HOLD_MS&&meaningfulRain(cached)){
-      rainfall={...cached,lastRain:cached.lastRain||fallback.lastRain};
+      rainfall={...cached,lastRain:mrmsLastRainLabel(cached,cached.lastRain||fallback.lastRain)};
       rainSource='Last trustworthy NOAA MRMS reading';
       rainDataUncertain=true;
       rainWarning='NOAA radar was unavailable; holding the last trustworthy NOAA reading. ';
@@ -758,6 +767,10 @@ async function fetchTrail(t){
     return x<=Date.now()&&x>=Date.now()-43200000;
   });
   const temp=temps.length?Math.min(...temps):50;
+  const currentTemperature=h.temperature_2m.reduce((latest,value,i)=>{
+    const timestamp=timeMs(h.time[i]);
+    return timestamp<=Date.now()&&timestamp>latest.timestamp?{timestamp,value:Number(value)}:latest;
+  },{timestamp:-Infinity,value:NaN}).value;
   const sensitivity=Number(t.sensitivity||1),drying=Number(t.drying||1),canopy=Number(t.canopy||.82);
   const drainage=normalizeDrainage(t.drainage);
   const effectiveDrying=drying*(drainageFactors[drainage]||1);
@@ -786,7 +799,7 @@ async function fetchTrail(t){
     rain72Min:rainfall.r72Min ?? r72,rain72Max:rainfall.r72Max ?? r72,
     rainSampleRadius:rainfall.sampleRadius||0,rainSampleCount:rainfall.sampleCount||1,
     rainSource,rainWarning,rainDiagnostics,rainDataUncertain,
-    humidity:hum,wind,tempMin:temp,score,
+    humidity:hum,wind,temperature:Number.isFinite(currentTemperature)?currentTemperature:temp,tempMin:temp,score,
     rideability:rainSource==='Untrusted precipitation data'?null:computedRideability,
     status:rainSource==='Untrusted precipitation data'?{key:'yellow',label:'Rain data unavailable'}:computedStatus,
     ready:rainSource==='Untrusted precipitation data'?'Check official status':computedReady,
@@ -794,6 +807,10 @@ async function fetchTrail(t){
   };
 }
 function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]))}
+function weatherSummary(r){
+  if(r.weatherError)return 'Weather unavailable.';
+  return `Temperature ${Math.round(r.temperature)}°F, humidity ${Math.round(r.humidity)}%, wind ${Math.round(r.wind)} mph.`;
+}
 function sampleHeatmapSvg(period){
   const points=Array.isArray(period?.sampleDetails)?period.sampleDetails:[];
   if(!points.length)return '<p class="diag-muted">No sample-point data available.</p>';
@@ -938,7 +955,7 @@ function render(){
   if(userLocation){
     results=results.map(r=>({...r,distance:currentDistance(r)}));
   }
-  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div>${readyFactHtml(r.ready)}</div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div><div class="explain">${r.weatherError?'Live weather could not be loaded for this trail. ':''}${r.rainWarning||''}${r.weatherError?'':'Humidity '+Math.round(r.humidity)+'%, wind '+Math.round(r.wind)+' mph.'}</div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
+  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div>${readyFactHtml(r.ready)}</div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div><div class="explain">${weatherSummary(r)}</div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
 <button type="button" class="report-toggle" data-report-toggle="${r.id}" aria-expanded="false">
   <span><b>${communityHeading.title}</b><small class="community-summary">${communityHeading.summary}</small>${communityHeading.alert?`<small class="community-alert">${communityHeading.alert}</small>`:''}</span>
   <span class="chev">⌄</span>
