@@ -1,5 +1,66 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V70 nationwide data foundation
+
+Baseline: V69.
+
+- Adds an additive PostGIS migration for indexed trail centers, route geometry,
+  versioned soil profiles, weather snapshots, and nationwide rider reports.
+- Preserves and synchronizes the existing `ohio_trails`,
+  `ohio_trail_reports`, administrator access, and current report behavior.
+- Attempts the bounded nationwide catalog first and falls back to the existing
+  Ohio catalog until the migration is installed.
+- Adds country and state codes to Developer Mode for future trail additions.
+- Rebuilds all 39 USDA profiles from the current live Supabase trail centers.
+- Stores the exact research coordinate with every packaged and database soil
+  profile so a stale profile cannot silently follow a moved trail.
+- Corrects Mountwood's stale soil research from Low confidence at the old
+  packaged coordinate to Medium confidence at its current live location.
+- Does not change rainfall weighting, rideability thresholds, readiness
+  calculations, card layout, map behavior, or community-report selections.
+
+Supabase rollout order:
+
+1. `supabase/nationwide-foundation.sql`
+2. `supabase/v70-soil-profile-seed.sql`
+
+V70 verification:
+
+- The live Supabase migration completed with 39/39 legacy trails copied to the
+  nationwide index and all 3 existing rider reports preserved.
+- The live bounded catalog returned 39 trails and 39 coordinate-linked soil
+  profiles.
+- Mountwood returned its current live center, `WV` state code, Medium
+  confidence, 9/17 usable samples, and a silt-loam profile.
+- The browser rendered all 39 cards from the migrated service; none displayed
+  unavailable weather.
+- Live NOAA 12/24/48/72-hour checks passed in Columbus, Cleveland, and
+  Cincinnati, including rolling-total ordering.
+- Live USDA, rainfall safeguards, shared reports, administrator publishing,
+  location controls, card cleanup, JavaScript syntax, and ZIP integrity
+  checks passed.
+
+## V69 automatic USDA soil profiles
+
+- New trails automatically research a 17-point USDA NRCS SSURGO soil profile before publishing.
+- Moving a trail's access/location point automatically refreshes that soil profile.
+- Changing only the rainfall weather center does not change soil.
+- The researched profile is stored with the shared Supabase trail record and is used by every visitor.
+- If USDA cannot verify a new or relocated trail, the trail is not published with a guessed or neutral soil value.
+
+V69 verification:
+
+- The live USDA service returned HTTP 200 and browser CORS permission.
+- The exact app calculation returned Silt Loam, Moderately well drained,
+  factor 0.90, with 16/17 usable samples at an Ohio test location.
+- Trigger tests passed for a new trail, a moved trail, an unchanged trail, and
+  a weather-center-only change.
+- All 39 live trail cards rendered in the browser with no unavailable cards.
+- Live NOAA 12/24/48/72-hour checks passed at Columbus, Cleveland, and
+  Cincinnati; rolling totals remained ordered.
+- Rainfall safeguards, card cleanup, community reports, location controls,
+  administrator publishing, and JavaScript syntax tests passed.
+
 ## V68 sticky rider observations
 
 Baseline: V67.
