@@ -1,7 +1,7 @@
 :root{--bg:#e9ede9;--panel:#fff;--text:#152019;--muted:#66736a;--line:#d2dad3;--brand:#173f2a;--green:#237a43;--yellow:#ffd400;--orange:#ef7b22;--red:#c53131;--blue:#2b65a8}
 *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 header{background:var(--brand);color:#fff;padding:16px 18px}.header-inner{max-width:1240px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:16px}header h1{margin:0;font-size:1.38rem}.header-updated{font-size:.78rem;opacity:.82;white-space:nowrap}
-main{max-width:1240px;margin:auto;padding:16px}.toolbar{display:grid;grid-template-columns:minmax(220px,1fr) 170px 160px auto;gap:10px;margin-bottom:12px}
+main{max-width:1240px;margin:auto;padding:16px}.toolbar{display:grid;grid-template-columns:minmax(220px,1fr) 190px 170px 160px auto;gap:10px;margin-bottom:12px}
 input,select,textarea,button{font:inherit;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;color:inherit} textarea{min-height:82px;resize:vertical} button{cursor:pointer;font-weight:700} button.primary{background:var(--brand);color:#fff;border-color:var(--brand)} button.danger{color:#9b2222}
 .notice{background:#fff8df;border:1px solid #ead48c;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:.86rem}
 .location-control{white-space:nowrap;color:var(--brand);background:#fff}.location-control:hover{border-color:var(--brand);background:#f8fbf8}

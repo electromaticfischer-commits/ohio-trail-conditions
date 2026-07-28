@@ -1,5 +1,30 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V71 West Virginia expansion
+
+Baseline: V70.
+
+- Adds 13 verified public West Virginia mountain-bike trail systems to the current site.
+- Uses route geometry from the official West Virginia Trail Inventory for 11 systems and
+  OpenStreetMap mountain-bike geometry for Cacapon and Snowshoe.
+- Samples USDA NRCS soil at 17 evenly distributed locations along each mapped trail network,
+  with low-confidence results kept neutral and available for Developer Mode adjustment.
+- Adds an Ohio/West Virginia state filter, widens the live catalog bounds, changes the scalable
+  site title to `Mountain Bike Trail Conditions`, and corrects the footer version to `v71.0`.
+- Preserves the V70 rainfall, rideability, readiness, rider-report, and developer-publishing math.
+
+V71 data migration:
+
+1. The V70 nationwide foundation must already be installed.
+2. Run `supabase/v71-west-virginia-expansion.sql`.
+3. Confirm the result lists 13 active West Virginia systems with route and soil records.
+
+V71 verification:
+
+- West Virginia inventory access, state filtering, packaged fallback, inline-script parity,
+  database row counts, route metadata, soil metadata, and unchanged V70 calculation contracts
+  are covered by `tests/west-virginia-expansion.test.js`.
+
 ## V70 nationwide data foundation
 
 Baseline: V69.
