@@ -1,5 +1,17 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V73 Pennsylvania expansion
+
+Baseline: V72.
+
+- Adds all 25 Pennsylvania state-park trail systems where mountain biking is marked `Promoted` in the official Pennsylvania DCNR trail layer.
+- Uses monthly updated DCNR GPS geometry for trail-network centers and 17-point USDA soil sampling.
+- Adds Pennsylvania to the state filter and expands the shared-catalog boundary eastward.
+- Keeps trail mileage out of the interface and shared records.
+- Preserves V72 rainfall, rideability, readiness, map, and community-report behavior.
+
+Run `supabase/v73-pennsylvania-expansion.sql` once before publishing the site so the shared catalog includes Pennsylvania.
+
 ## V72 Indiana expansion
 
 Baseline: V71.
