@@ -1,5 +1,18 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V72 Indiana expansion
+
+Baseline: V71.
+
+- Adds 25 verified Indiana mountain-bike trail systems.
+- Uses active mountain-bike records from the Indiana DNR Trails Inventory for trail-network centers and internal geometry.
+- Uses 17 distributed mapped-route locations for USDA soil research.
+- Adds Indiana to the state filter and expands the shared-catalog boundary westward.
+- Keeps trail mileage out of the interface and shared records.
+- Preserves V71 rainfall, rideability, readiness, map, and community-report behavior.
+
+Run `supabase/v72-indiana-expansion.sql` once before publishing the site so the shared catalog includes Indiana.
+
 ## V71 West Virginia expansion
 
 Baseline: V70.
