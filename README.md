@@ -1,5 +1,18 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V74 Michigan expansion
+
+Baseline: V73.
+
+- Adds 38 Michigan DNR mountain-bike trail systems grouped with the state’s Recreation Search facility IDs.
+- Uses official Michigan DNR trail geometry for centers and 17-point USDA soil sampling.
+- Excludes malformed and rail-trail-only facility groups from the mountain-bike catalog.
+- Keeps unavailable USDA coverage neutral and low-confidence rather than guessing a soil type.
+- Adds Michigan to the state filter and expands the shared-catalog boundary for both peninsulas.
+- Preserves V73 rainfall, rideability, readiness, map, and community-report behavior.
+
+Run `supabase/v74-michigan-expansion.sql` once before publishing the site so the shared catalog includes Michigan.
+
 ## V73 Pennsylvania expansion
 
 Baseline: V72.
