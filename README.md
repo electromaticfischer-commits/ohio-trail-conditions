@@ -633,3 +633,11 @@ Live results at NOAA valid time `2026-07-22T20:00:00Z` (25 samples per period):
 Not verified:
 
 - The map overlay was intentionally not tested or changed in this point-data repair.
+# V75 — Five-state mountain-bike catalog audit
+
+- Added 15 verified natural-surface mountain-bike riding areas across Ohio, West Virginia, Indiana, Pennsylvania, and Michigan.
+- Retired Germantown MetroPark, Lake Vesuvius Recreation Area, and Mike's Bike Park from the active catalog. Existing database history and rider reports are preserved.
+- Every addition links to an official land-manager source and a Trailforks riding area.
+- Every addition received a fresh 17-location USDA SSURGO soil check with at least medium confidence.
+- The active catalog now contains 148 systems: Ohio 37, West Virginia 16, Indiana 26, Pennsylvania 28, and Michigan 41.
+- Rainfall retrieval, weather aging, rideability, readiness, community reporting, and card calculations were not changed.

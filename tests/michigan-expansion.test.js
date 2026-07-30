@@ -11,8 +11,8 @@ const profiles = JSON.parse(source.match(/^const soilProfiles=(.+);$/m)[1]);
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 
 const michigan = trails.filter(trail => trail.stateCode === 'MI');
-assert.strictEqual(michigan.length, 38, 'V74 must package 38 Michigan DNR systems');
-assert.strictEqual(new Set(michigan.map(trail => trail.id)).size, 38, 'Michigan IDs must be unique');
+assert.strictEqual(michigan.length, 41, 'Current catalog must package 41 verified Michigan systems');
+assert.strictEqual(new Set(michigan.map(trail => trail.id)).size, 41, 'Michigan IDs must be unique');
 assert(michigan.every(trail => trail.official && trail.organization), 'Michigan source metadata missing');
 assert(michigan.every(trail => Number.isFinite(trail.lat) && Number.isFinite(trail.lon)), 'Michigan center missing');
 assert(michigan.every(trail => Number.isFinite(trail.weatherLat) && Number.isFinite(trail.weatherLon)), 'Michigan weather center missing');
@@ -22,7 +22,7 @@ assert(michigan.filter(trail => profiles[trail.id].dominantSoil === 'Undetermine
 assert(michigan.filter(trail => profiles[trail.id].confidence === 'Low').every(trail => profiles[trail.id].sampleCoverage), 'Low-confidence soil must expose sample coverage');
 
 assert(html.includes('<option value="MI">Michigan</option>'), 'Michigan state filter missing');
-assert(html.includes('<span>v74.0</span>'), 'Visible V74 version missing');
+assert(html.includes('<span>v75.0</span>'), 'Visible current version missing');
 assert(source.includes('p_west:-90.5') && source.includes('p_north:48'), 'Michigan catalog boundary missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert(!source.includes('Mapped trail length:'), 'Trail length display returned');

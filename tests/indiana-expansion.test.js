@@ -11,18 +11,18 @@ const profiles = JSON.parse(source.match(/^const soilProfiles=(.+);$/m)[1]);
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 
 const indiana = trails.filter(trail => trail.stateCode === 'IN');
-assert.strictEqual(indiana.length, 25, 'V72 must package 25 verified Indiana systems');
+assert.strictEqual(indiana.length, 26, 'Current catalog must package 26 verified Indiana systems');
 assert(indiana.every(trail => trail.official && trail.organization), 'Indiana source metadata missing');
 assert(indiana.every(trail => Number.isFinite(trail.lat) && Number.isFinite(trail.lon)), 'Indiana center missing');
 assert(indiana.every(trail => Number.isFinite(trail.weatherLat) && Number.isFinite(trail.weatherLon)), 'Indiana weather center missing');
 assert(indiana.every(trail => !Object.hasOwn(trail, 'lengthMiles')), 'Trail mileage must not be published');
 assert(indiana.every(trail => profiles[trail.id]), 'Indiana soil profile missing');
-assert(indiana.every(trail => profiles[trail.id].samplingMethod.includes('route')), 'Indiana route-based soil method missing');
+assert(indiana.every(trail => /route|riding-area/.test(profiles[trail.id].samplingMethod)), 'Indiana soil sampling method missing');
 assert(indiana.filter(trail => profiles[trail.id].confidence === 'Low').every(trail => profiles[trail.id].sampleCoverage), 'Low-confidence soil must expose sample coverage');
 
 assert(html.includes('<option value="IN">Indiana</option>'), 'Indiana state filter missing');
-assert(html.includes('<span>v72.0</span>'), 'Visible V72 version missing');
-assert(source.includes('p_west:-88.2'), 'Indiana catalog boundary missing');
+assert(html.includes('<span>v75.0</span>'), 'Visible current version missing');
+assert(source.includes('p_west:-90.5'), 'Current five-state catalog boundary missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert(!source.includes('Mapped trail length:'), 'Trail length display returned');
 assert((sql.match(/insert into public\.trail_systems/g) || []).length === 25, 'SQL trail count is not 25');
