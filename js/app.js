@@ -107,8 +107,8 @@ function stripGuessedSoil(trail){
 }
 function effectiveBaseTrail(t){return stripGuessedSoil(builtInOverrides[t.id]?{...t,...builtInOverrides[t.id],id:t.id}:t)}
 function allManagedTrails(){
- if(sharedTrails)return sharedTrails.map(t=>({...t,source:'Shared'}));
  const records=new Map(baseTrails.map(t=>[t.id,{...t,source:'Built-in'}]));
+ if(sharedTrails)sharedTrails.filter(t=>!['germantown','lake-vesuvius','mikes'].includes(t.id)).forEach(t=>records.set(t.id,{...t,source:'Shared'}));
  baseTrails.forEach(t=>{if(builtInOverrides[t.id])records.set(t.id,{...stripGuessedSoil({...t,...builtInOverrides[t.id],id:t.id}),source:'Local edit'})});
  customTrails.forEach(t=>records.set(t.id,{...stripGuessedSoil(t),source:'Local edit'}));
  return [...records.values()];
