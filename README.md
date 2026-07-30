@@ -1,5 +1,19 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V76.1 packaged catalog sync
+
+Baseline: V76.0.
+
+- Compares the active shared Supabase catalog with the packaged five-state catalog.
+- Adds A.W.Marion and The Wilds, the two valid active systems that existed only
+  in the shared catalog.
+- Keeps Germantown, Lake Vesuvius, and Mike's Bike Park retired.
+- Suppresses the duplicate shared Starhill record because Forry Preserve /
+  Star Hill is already packaged.
+- Expands the packaged catalog from 297 to 299 systems, including 49 in Ohio.
+- Does not change rainfall, rideability, readiness, soil, or community-report
+  calculations.
+
 ## V76 comprehensive five-state catalog
 
 Baseline: V75.1.

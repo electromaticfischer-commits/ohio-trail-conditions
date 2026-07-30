@@ -1,0 +1,44 @@
+{
+  "baseline": "V76.0",
+  "packagedBefore": 297,
+  "packagedAfter": 299,
+  "sharedOnlyReview": [
+    {
+      "id": "a-w-marion-mrwzgndf",
+      "name": "A.W.Marion",
+      "decision": "package",
+      "reason": "Active, verified Ohio mountain-bike trail system with researched soil data."
+    },
+    {
+      "id": "the-wilds-mrx0vsah",
+      "name": "The Wilds",
+      "decision": "package",
+      "reason": "Active Ohio mountain-bike trail system with researched soil data."
+    },
+    {
+      "id": "starhill-mrwzkfre",
+      "name": "Starhill",
+      "decision": "exclude-duplicate",
+      "reason": "Duplicate shared record for the packaged Forry Preserve / Star Hill system."
+    },
+    {
+      "id": "germantown",
+      "name": "Germantown MetroPark",
+      "decision": "retain-retirement",
+      "reason": "Previously retired because mountain-bike access could not be verified."
+    },
+    {
+      "id": "lake-vesuvius",
+      "name": "Lake Vesuvius Recreation Area",
+      "decision": "retain-retirement",
+      "reason": "Previously retired from the mountain-bike catalog."
+    },
+    {
+      "id": "mikes",
+      "name": "Mike's Bike Park",
+      "decision": "retain-retirement",
+      "reason": "Previously retired because it is not a comparable outdoor trail system."
+    }
+  ],
+  "mathChanged": false
+}
