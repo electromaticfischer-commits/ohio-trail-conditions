@@ -17,16 +17,16 @@
 </div>
 <div class="toolbar">
 <input id="search" placeholder="Search trails or regions…" aria-label="Search trails">
-<select id="stateFilter" aria-label="Choose a state"><option value="OH">Ohio</option><option value="WV">West Virginia</option><option value="IN">Indiana</option><option value="PA">Pennsylvania</option><option value="MI">Michigan</option></select>
+<select id="stateFilter" aria-label="Choose a state"><option value="all" selected>All states</option><option value="OH">Ohio</option><option value="WV">West Virginia</option><option value="IN">Indiana</option><option value="PA">Pennsylvania</option><option value="MI">Michigan</option></select>
 <select id="statusFilter"><option value="all">All conditions</option><option value="green">Likely good</option><option value="yellow">Use caution</option><option value="orange">Marginal</option><option value="red">Likely wet</option><option value="blue">Freeze-thaw risk</option></select>
 <select id="sort"><option value="distance">Nearest first</option><option value="rideability">Best rideability</option><option value="recent-report">Recently reported</option><option value="name">Trail name</option></select>
 <button id="locate" class="location-control" type="button">Find trails near me</button>
 <button id="manage" type="button" hidden>Manage trails</button>
 <button id="adminSignOut" type="button" hidden>Sign out</button>
 </div>
-<div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading live weather…</div></div></section></div>
+<div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading nearby trails…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v76.1</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v77.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="adminLoginDialog" class="login-dialog">
 <div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
@@ -182,6 +182,7 @@ function closestLabel(value,labels){const n=Number(value);return Object.entries(
 function shortSurface(value){return String(value).replace('Clay-heavy natural soil','Clay-heavy').replace('Loam/topsoil','Loam').replace('Sandy soil','Sandy').replace('Silty soil','Silty').replace('Rocky natural surface','Rocky').replace('Gravel/crushed stone','Gravel').replace('Machine-built aggregate','Aggregate').replace('Boardwalk/wood features','Wood features')}
 function trailCharacteristics(t){const profile=t.soilProfile;const mappedSoil=profile?`${profile.dominantSoil}${profile.secondarySoil?` • ${profile.secondarySoil}`:''}`:'Not mapped';const drainage=profile?.naturalDrainage||normalizeDrainage(t.drainage);const confidence=profile?.confidence||'Not rated';return `<div class="characteristics"><strong>Trail characteristics</strong><span><b>Mapped soil:</b> ${mappedSoil}</span><span><b>Natural drainage:</b> ${drainage}</span><span><b>Soil confidence:</b> ${confidence}</span><span><b>Rain sensitivity:</b> ${closestLabel(t.sensitivity,sensitivityLabels)}</span><span><b>Canopy:</b> ${closestLabel(t.canopy,canopyLabels)}</span></div>`}
 let results=[],markers=[],userLocation=null,userMarker=null,pickMode=false,pickTarget='access',pickMarker=null,selectedTrailId=null;
+let cachedWeather=new Map(),loadedTrailIds=new Set(),mapDiscoveryTimer=null;
 let customTrails=readJSON('customTrails',[]);
 let developerMode=readJSON('developerMode',false);
 let hiddenTrailIds=readJSON('hiddenTrailIds',[]);
@@ -310,7 +311,11 @@ async function loadSharedData(){
    console.info('Nationwide trail index is not installed yet; using the Ohio compatibility catalog.');
    trailRows=await supabaseRpc('get_ohio_trails');
   }
-  await refreshCommunityReports();
+  const [weatherRows]=await Promise.all([
+   supabaseRpc('get_latest_trail_weather',{p_trail_ids:null}),
+   refreshCommunityReports()
+  ]);
+  cachedWeather=new Map((weatherRows||[]).map(row=>[row.trail_id,row]));
   const loaded=(trailRows||[]).map(row=>stripGuessedSoil(row.data)).filter(t=>t&&t.id);
   if(loaded.length)sharedTrails=loaded;
  }catch(error){
@@ -386,7 +391,11 @@ const PrecipControl=L.Control.extend({
   }
 });
 map.addControl(new PrecipControl());
-map.on('moveend zoomend',()=>{if(precipitationPeriod)refreshPrecipitationOverlay()});
+map.on('moveend zoomend',()=>{
+ if(precipitationPeriod)refreshPrecipitationOverlay();
+ clearTimeout(mapDiscoveryTimer);
+ mapDiscoveryTimer=setTimeout(()=>discoverMapArea(),450);
+});
 setTimeout(()=>map.invalidateSize(),250);window.addEventListener('resize',()=>map.invalidateSize());
 function trailWeatherLat(t){const n=Number(t.weatherLat);return Number.isFinite(n)?n:Number(t.lat)}
 function trailWeatherLon(t){const n=Number(t.weatherLon);return Number.isFinite(n)?n:Number(t.lon)}
@@ -1088,13 +1097,13 @@ arr.forEach(r=>{
     fillColor:rideColor(r.rideability),
     fillOpacity:.95
   })
-  .bindTooltip(`<b>${r.name}</b><br>${r.rideability}% rideability`,{
+  .bindTooltip(`<b>${r.name}</b><br>${r.rideability==null?'Rideability unavailable':r.rideability+'% rideability'}`,{
     direction:'top',
     offset:[0,-8],
     opacity:.96,
     sticky:true
   })
-  .bindPopup(`<b>${r.name}</b><br>${r.rideability}% rideability${r.distance!=null?'<br>'+r.distance.toFixed(1)+' miles away':''}`)
+  .bindPopup(`<b>${r.name}</b><br>${r.rideability==null?'Rideability unavailable':r.rideability+'% rideability'}${r.distance!=null?'<br>'+r.distance.toFixed(1)+' miles away':''}`)
   .addTo(map);
 
   m.trailId=r.id;
@@ -1117,6 +1126,7 @@ function unavailableTrail(t,loading=false){
       rainWarning:'Rain data unavailable. ',
       humidity:0,
       wind:0,
+      temperature:50,
       tempMin:50,
       score:0,
       rideability:null,
@@ -1126,37 +1136,97 @@ function unavailableTrail(t,loading=false){
       weatherError:true
   };
 }
+function trailFromCachedWeather(t,row){
+  if(!row||!row.result)return unavailableTrail(t,false);
+  const age=Date.now()-new Date(row.observed_at||row.result.observedAt||0).getTime();
+  if(!Number.isFinite(age)||age>3*3600000)return unavailableTrail(t,false);
+  const weather=row.result;
+  const required=['rain12','rain24','rain48','rain72','humidity','wind','cloud','tempMin','temperature'];
+  if(required.some(key=>!Number.isFinite(Number(weather[key]))))return unavailableTrail(t,false);
+
+  const r12=Number(weather.rain12),r24=Number(weather.rain24),r48=Number(weather.rain48),r72=Number(weather.rain72);
+  const hum=Number(weather.humidity),wind=Number(weather.wind),cloud=Number(weather.cloud);
+  const temp=Number(weather.tempMin),currentTemperature=Number(weather.temperature);
+  const sensitivity=Number(t.sensitivity||1),canopy=Number(t.canopy||.82);
+  const soilProfile=t.soilProfile||soilProfiles[t.id]||null;
+  const researchedSoilFactor=soilProfile&&soilProfile.confidence!=='Low'?soilProfile.soilDryingFactor:1;
+  const engineeredDryingFactor=engineeredDryingFactors[t.id]||1;
+  const effectiveDrying=researchedSoilFactor*engineeredDryingFactor;
+  const mm12=r12*25.4,mm24=r24*25.4,mm48=r48*25.4,mm72=r72*25.4;
+  const rain0to12=mm12;
+  const rain12to24=Math.max(0,mm24-mm12);
+  const rain24to48=Math.max(0,mm48-mm24);
+  const rain48to72=Math.max(0,mm72-mm48);
+  const rain=(rain0to12*5+rain12to24*2.4+rain24to48*.8+rain48to72*.25)*sensitivity;
+  const lingeringMoisture=rain0to12+rain12to24*.75+rain24to48*.4+rain48to72*.15;
+  const sat=Math.min(22,lingeringMoisture*.75*sensitivity);
+  const hp=Math.max(0,(hum-68)*.28)*canopy;
+  const cp=Math.max(0,(cloud-55)*.08)*canopy;
+  const dry=(Math.max(0,wind-3)*.55+Math.max(0,temp-55)*.16)*effectiveDrying;
+  const cold=temp<38?(38-temp)*1.05:0;
+  const score=Math.max(0,Math.min(100,rain+sat+hp+cp+cold-dry));
+  const unavailable=row.data_quality==='unavailable'||weather.rainSource==='Untrusted precipitation data';
+  return {
+    ...t,
+    rain12:r12,rain24:r24,rain48:r48,rain72:r72,lastRain:unavailable?'Uncertain':weather.lastRain,
+    rain24Min:Number(weather.rain24Min??r24),rain24Max:Number(weather.rain24Max??r24),
+    rain72Min:Number(weather.rain72Min??r72),rain72Max:Number(weather.rain72Max??r72),
+    rainSampleRadius:Number(weather.rainSampleRadius)||0,rainSampleCount:Number(weather.rainSampleCount)||1,
+    rainSource:weather.rainSource||'Unavailable',rainWarning:weather.rainWarning||'',
+    rainDiagnostics:weather.rainDiagnostics||{},rainDataUncertain:Boolean(weather.rainDataUncertain),
+    humidity:hum,wind,temperature:currentTemperature,tempMin:temp,score,
+    soilProfile,effectiveDrying,engineeredDryingFactor,
+    rideability:unavailable?null:Math.round(100-score),
+    status:unavailable?{key:'yellow',label:'Rain data unavailable'}:statusFrom(score,temp),
+    ready:unavailable?'Check official status':readyEstimate(score,effectiveDrying),
+    distance:userLocation?haversine(userLocation.lat,userLocation.lon,t.lat,t.lon):null,
+    weatherError:unavailable,
+    weatherObservedAt:row.observed_at
+  };
+}
+function addDiscoveredTrails(trails){
+  let added=0;
+  trails.forEach(trail=>{
+    if(loadedTrailIds.has(trail.id))return;
+    loadedTrailIds.add(trail.id);
+    results.push(trailFromCachedWeather(trail,cachedWeather.get(trail.id)));
+    added++;
+  });
+  return added;
+}
+function discoverMapArea(){
+  if(!sharedTrails&&!cachedWeather.size)return;
+  const bounds=map.getBounds();
+  const selectedState=document.getElementById('stateFilter').value;
+  const candidates=catalog().filter(t=>
+    (selectedState==='all'||t.stateCode===selectedState)&&
+    bounds.contains([trailWeatherLat(t),trailWeatherLon(t)])
+  );
+  if(addDiscoveredTrails(candidates))render();
+}
 async function load(focusTrail=null){
   const generation=++loadGeneration;
-  const selectedState=document.getElementById('stateFilter').value||'OH';
-  const stateLabel=document.querySelector(`#stateFilter option[value="${selectedState}"]`)?.textContent||selectedState;
-  document.getElementById('trailList').innerHTML=`<div class="loading">Loading live weather for ${stateLabel} trails…</div>`;
+  document.getElementById('trailList').innerHTML='<div class="loading">Loading nearby trails…</div>';
   await loadSharedData();
   if(generation!==loadGeneration)return;
-  const trails=catalog().filter(t=>(t.stateCode||'OH')===selectedState);
-  results=trails.map(t=>unavailableTrail(t,true));
-  render();
-
-  let next=0,completed=0;
-  async function worker(){
-    while(next<trails.length&&generation===loadGeneration){
-      const index=next++;
-      try{results[index]=await fetchTrail(trails[index])}
-      catch(error){results[index]=unavailableTrail(trails[index],false)}
-      completed++;
-      if(completed%5===0||completed===trails.length)render();
-    }
+  results=[];loadedTrailIds=new Set();
+  if(userLocation){
+    addDiscoveredTrails(catalog().filter(t=>haversine(userLocation.lat,userLocation.lon,t.lat,t.lon)<=75));
+  }else{
+    const bounds=map.getBounds();
+    addDiscoveredTrails(catalog().filter(t=>bounds.contains([trailWeatherLat(t),trailWeatherLon(t)])));
   }
-  await Promise.all(Array.from({length:2},worker));
-  if(generation!==loadGeneration)return;
-
-  document.getElementById('updated').textContent=new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+  const newest=[...cachedWeather.values()].reduce((latest,row)=>{
+    const value=new Date(row.observed_at||0).getTime();
+    return value>latest?value:latest;
+  },0);
+  document.getElementById('updated').textContent=newest?new Date(newest).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'Unavailable';
   render();
   renderAdmin();
 
   if(focusTrail)selectTrail(focusTrail.id,{moveMap:true,scrollCard:false});
 }
-function locate({silent=false}={}){const b=document.getElementById('locate');if(!navigator.geolocation){if(!silent)alert('Location is not supported in this browser.');return}b.disabled=true;b.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{userLocation={lat:pos.coords.latitude,lon:pos.coords.longitude};results=results.map(r=>({...r,distance:haversine(userLocation.lat,userLocation.lon,r.lat,r.lon)}));if(userMarker)map.removeLayer(userMarker);userMarker=L.circleMarker([userLocation.lat,userLocation.lon],{radius:8,color:'#173f2a',fillColor:'#fff',fillOpacity:1,weight:3}).bindPopup('Your location').addTo(map);map.setView([userLocation.lat,userLocation.lon],8);b.disabled=false;document.getElementById('sort').value='distance';render()},()=>{b.disabled=false;b.textContent='Find trails near me';if(!silent)alert('Location was not shared.')})}
+function locate({silent=false}={}){const b=document.getElementById('locate');if(!navigator.geolocation){if(!silent)alert('Location is not supported in this browser.');return}b.disabled=true;b.textContent='Locating…';navigator.geolocation.getCurrentPosition(pos=>{userLocation={lat:pos.coords.latitude,lon:pos.coords.longitude};addDiscoveredTrails(catalog().filter(t=>haversine(userLocation.lat,userLocation.lon,t.lat,t.lon)<=75));results=results.map(r=>({...r,distance:haversine(userLocation.lat,userLocation.lon,r.lat,r.lon)}));if(userMarker)map.removeLayer(userMarker);userMarker=L.circleMarker([userLocation.lat,userLocation.lon],{radius:8,color:'#173f2a',fillColor:'#fff',fillOpacity:1,weight:3}).bindPopup('Your location').addTo(map);map.setView([userLocation.lat,userLocation.lon],8);b.disabled=false;document.getElementById('sort').value='distance';render()},()=>{b.disabled=false;b.textContent='Find trails near me';if(!silent)alert('Location was not shared.')})}
 async function reuseGrantedLocation(){
  if(!navigator.permissions||!navigator.geolocation)return;
  try{
@@ -1273,23 +1343,13 @@ async function saveTrail(e){
     if(dialog.open)dialog.close();
     resetForm();
 
-    // Refresh this trail's weather and model values independently. A weather
-    // failure must not undo or hide the catalog edit that was just saved.
-    try{
-      const refreshed=await fetchTrail(savedTrail);
-      results=results.map(x=>x.id===savedTrail.id?refreshed:x);
-      if(!results.some(x=>x.id===savedTrail.id))results.push(refreshed);
-      render();
-      map.setView([trailWeatherLat(savedTrail),trailWeatherLon(savedTrail)],Math.max(map.getZoom(),11));
-      const marker=markers.find(m=>m.trailId===savedTrail.id);
-      if(marker)marker.openPopup();
-    }catch(weatherError){
-      console.warn('Trail saved, but weather refresh failed',weatherError);
-      if(!previousResult){
-        results.push({...savedTrail,rain12:0,lastRain:'Unknown',rain24:0,rain48:0,rain72:0,rain24Min:0,rain24Max:0,rain72Min:0,rain72Max:0,rainSampleRadius:0,rainSampleCount:0,rainSource:'Unavailable',rainWarning:'Rain data unavailable. ',humidity:0,wind:0,tempMin:50,score:0,rideability:null,status:{key:'yellow',label:'Weather unavailable'},ready:'Check official status',weatherError:true});
-        render();
-      }
-    }
+    const refreshed=trailFromCachedWeather(savedTrail,cachedWeather.get(savedTrail.id));
+    results=results.map(x=>x.id===savedTrail.id?refreshed:x);
+    if(!results.some(x=>x.id===savedTrail.id)){results.push(refreshed);loadedTrailIds.add(savedTrail.id);}
+    render();
+    map.setView([trailWeatherLat(savedTrail),trailWeatherLon(savedTrail)],Math.max(map.getZoom(),11));
+    const marker=markers.find(m=>m.trailId===savedTrail.id);
+    if(marker)marker.openPopup();
     renderAdmin();
     alert(`${savedTrail.name} was published for all users.`);
   }catch(error){
@@ -1406,7 +1466,7 @@ function renderAdmin(){
  document.querySelectorAll('[data-reset]').forEach(b=>b.onclick=()=>resetBuiltIn(b.dataset.reset));
 }
 function exportData(){const blob=new Blob([JSON.stringify({customTrails,hiddenTrailIds,deletedTrailIds,builtInOverrides},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ohio-trail-edits.json';a.click();URL.revokeObjectURL(a.href)}
-document.getElementById('search').addEventListener('input',render);document.getElementById('stateFilter').addEventListener('change',()=>load());document.getElementById('statusFilter').addEventListener('change',render);document.getElementById('sort').addEventListener('change',render);document.getElementById('locate').addEventListener('click',locate);
+document.getElementById('search').addEventListener('input',render);document.getElementById('stateFilter').addEventListener('change',()=>{discoverMapArea();render()});document.getElementById('statusFilter').addEventListener('change',render);document.getElementById('sort').addEventListener('change',render);document.getElementById('locate').addEventListener('click',locate);
 function updateDeveloperUI(){
  const b=document.getElementById('developerMode'),manage=document.getElementById('manage'),signOut=document.getElementById('adminSignOut');
  b.textContent=adminAuthenticated?(developerMode?'Developer: On':'Developer: Signed in'):'Developer';

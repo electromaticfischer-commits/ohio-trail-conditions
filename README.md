@@ -1,5 +1,42 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V77.0 shared weather and automatic discovery
+
+Baseline: V76.1.
+
+- NOAA MRMS and Open-Meteo weather are refreshed centrally in Supabase every
+  hour, in five staggered state jobs.
+- The browser loads one shared weather snapshot instead of making separate
+  weather requests for every trail.
+- The rainfall, soil, rideability, and readiness formulas remain in the
+  browser and use the same V76.1 coefficients.
+- If location permission was already granted, every trail within 75 miles is
+  shown. There is no result cap.
+- Moving or zooming the map automatically adds trails in the visible area.
+  Trails already loaded stay available and are not duplicated.
+- All five states are the default view; the state menu remains available as a
+  filter.
+- Fifteen verified trails present in the packaged V76.1 catalog were synced
+  into the shared catalog before the cache was refreshed.
+- Shared weather older than three hours is rejected, and unavailable
+  precipitation still withholds rideability.
+
+Backend files:
+
+- `supabase/v77-shared-weather-cache.sql`
+- `supabase/v77-packaged-catalog-sync.sql`
+- `supabase/functions/weather-refresh/index.ts`
+
+Verification:
+
+- 303 active shared records refreshed: 301 trusted, 2 guarded fallbacks, 0
+  unavailable.
+- All cached records had numeric 12/24/48/72-hour rainfall, current NOAA
+  timestamps, and no rainfall-ordering violations.
+- Live browser test loaded 258 trails in the opening map view with no
+  unavailable cards; one zoom-out automatically expanded to all 299 packaged
+  trails while retaining the original cards.
+
 ## V76.1 packaged catalog sync
 
 Baseline: V76.0.

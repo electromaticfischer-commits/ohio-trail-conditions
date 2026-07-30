@@ -29,14 +29,14 @@ assert(additions.every(addition => trails.some(trail => trail.id === addition.id
 assert(additions.every(addition => profiles[addition.id]), 'Approved addition missing a soil profile');
 assert(additions.every(addition => addition.routeSource?.name === 'MTB Project riding area'), 'MTB-specific source metadata missing');
 assert(additions.every(addition => Number.isFinite(addition.lat) && Number.isFinite(addition.lon)), 'Riding-area center missing');
-assert(html.includes('<span>v76.1</span>'), 'Visible V76.1 version missing');
+assert(html.includes('<span>v77.0</span>'), 'Visible current version missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert.strictEqual((sql.match(/insert into public\.trail_systems/g) || []).length, 149, 'Supabase trail upsert count is incorrect');
 assert.strictEqual((sql.match(/insert into public\.trail_soil_profiles/g) || []).length, 149, 'Supabase soil upsert count is incorrect');
 assert(!source.includes('Mapped trail length:'), 'Trail-length display returned');
-assert(source.includes("catalog().filter(t=>(t.stateCode||'OH')===selectedState)"), 'Weather loading must be limited to the selected state');
-assert(source.includes("Array.from({length:2},worker)"), 'Weather requests must use the bounded worker pool');
-assert(!html.includes('<option value="all">All states</option>'), 'Unbounded all-state live weather option returned');
+assert(source.includes("supabaseRpc('get_latest_trail_weather',{p_trail_ids:null})"), 'Shared weather cache loading missing');
+assert(!source.slice(source.indexOf('async function load(focusTrail=null)'), source.indexOf('function locate(')).includes('fetchTrail('), 'Per-trail live weather loading returned');
+assert(html.includes('<option value="all" selected>All states</option>'), 'Default all-state discovery option missing');
 
 for (const state of Object.values(audit.states)) {
   assert(state.entries.every(entry => ['add','retain-existing','exclude'].includes(entry.decision)), 'Unresolved audit decision remains');
