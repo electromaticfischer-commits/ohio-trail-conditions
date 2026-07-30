@@ -1,0 +1,45 @@
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+
+const root = path.join(__dirname, '..');
+const source = fs.readFileSync(path.join(root, 'js', 'app.js'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const sql = fs.readFileSync(path.join(root, 'supabase', 'v76-comprehensive-catalog.sql'), 'utf8');
+const audit = JSON.parse(fs.readFileSync(path.join(root, 'data', 'v76-five-state-catalog-audit.json'), 'utf8'));
+const trails = JSON.parse(source.match(/^const baseTrails=(.+);$/m)[1]);
+const profiles = JSON.parse(source.match(/^const soilProfiles=(.+);$/m)[1]);
+const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
+const additions = Object.values(audit.states)
+  .flatMap(state => state.entries)
+  .filter(entry => entry.decision === 'add')
+  .map(entry => entry.proposed);
+
+assert.strictEqual(trails.length, 297, 'V76 must contain 297 riding systems');
+assert.deepStrictEqual(
+  Object.fromEntries(['OH','WV','IN','PA','MI'].map(code => [
+    code,
+    trails.filter(trail => (trail.stateCode || 'OH') === code).length
+  ])),
+  {OH:47,WV:34,IN:40,PA:91,MI:85}
+);
+assert.strictEqual(additions.length, 149, 'V76 audit must approve 149 additions');
+assert.strictEqual(new Set(trails.map(trail => trail.id)).size, trails.length, 'Trail IDs must remain unique');
+assert(additions.every(addition => trails.some(trail => trail.id === addition.id)), 'Approved addition missing from packaged catalog');
+assert(additions.every(addition => profiles[addition.id]), 'Approved addition missing a soil profile');
+assert(additions.every(addition => addition.routeSource?.name === 'MTB Project riding area'), 'MTB-specific source metadata missing');
+assert(additions.every(addition => Number.isFinite(addition.lat) && Number.isFinite(addition.lon)), 'Riding-area center missing');
+assert(html.includes('<span>v76.0</span>'), 'Visible V76.0 version missing');
+assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
+assert.strictEqual((sql.match(/insert into public\.trail_systems/g) || []).length, 149, 'Supabase trail upsert count is incorrect');
+assert.strictEqual((sql.match(/insert into public\.trail_soil_profiles/g) || []).length, 149, 'Supabase soil upsert count is incorrect');
+assert(!source.includes('Mapped trail length:'), 'Trail-length display returned');
+assert(source.includes("catalog().filter(t=>(t.stateCode||'OH')===selectedState)"), 'Weather loading must be limited to the selected state');
+assert(source.includes("Array.from({length:2},worker)"), 'Weather requests must use the bounded worker pool');
+assert(!html.includes('<option value="all">All states</option>'), 'Unbounded all-state live weather option returned');
+
+for (const state of Object.values(audit.states)) {
+  assert(state.entries.every(entry => ['add','retain-existing','exclude'].includes(entry.decision)), 'Unresolved audit decision remains');
+}
+
+console.log('V76 comprehensive five-state catalog tests passed.');

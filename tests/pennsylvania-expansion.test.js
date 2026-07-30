@@ -11,7 +11,7 @@ const profiles = JSON.parse(source.match(/^const soilProfiles=(.+);$/m)[1]);
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 
 const pennsylvania = trails.filter(trail => trail.stateCode === 'PA');
-assert.strictEqual(pennsylvania.length, 28, 'Current catalog must package 28 verified Pennsylvania systems');
+assert.strictEqual(pennsylvania.length, 91, 'Current catalog must package 91 verified Pennsylvania systems');
 assert(pennsylvania.every(trail => trail.official && trail.organization), 'Pennsylvania source metadata missing');
 assert(pennsylvania.every(trail => Number.isFinite(trail.lat) && Number.isFinite(trail.lon)), 'Pennsylvania center missing');
 assert(pennsylvania.every(trail => Number.isFinite(trail.weatherLat) && Number.isFinite(trail.weatherLon)), 'Pennsylvania weather center missing');
@@ -21,7 +21,7 @@ assert(pennsylvania.every(trail => /route|riding-area/.test(profiles[trail.id].s
 assert(pennsylvania.filter(trail => profiles[trail.id].confidence === 'Low').every(trail => profiles[trail.id].sampleCoverage), 'Low-confidence soil must expose sample coverage');
 
 assert(html.includes('<option value="PA">Pennsylvania</option>'), 'Pennsylvania state filter missing');
-assert(html.includes('<span>v75.1</span>'), 'Visible current version missing');
+assert(html.includes('<span>v76.0</span>'), 'Visible current version missing');
 assert(source.includes('p_east:-74.5'), 'Pennsylvania catalog boundary missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert(!source.includes('Mapped trail length:'), 'Trail length display returned');

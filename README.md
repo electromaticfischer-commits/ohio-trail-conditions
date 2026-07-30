@@ -1,5 +1,26 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V76 comprehensive five-state catalog
+
+Baseline: V75.1.
+
+- Expands the packaged catalog from 148 to 297 mountain-bike riding systems:
+  Ohio 47, West Virginia 34, Indiana 40, Pennsylvania 91, and Michigan 85.
+- Audits 689 MTB Project directory entries and records an explicit add, retain,
+  or exclude decision in `data/v76-five-state-catalog-audit.json`.
+- Uses one card per named riding area; directory containers, locality
+  aggregates, aliases, individual fragments, non-MTB uses, and access conflicts
+  are excluded.
+- Adds 17-point USDA soil research for every new center. Low-confidence or
+  unavailable results retain neutral factors and remain adjustable in
+  Developer Mode.
+- Loads live weather only for the selected state with two bounded workers,
+  preventing the expanded catalog from overwhelming NOAA and Open-Meteo.
+- Does not change rainfall, rideability, readiness, or community-report math.
+
+Run `supabase/v76-comprehensive-catalog.sql` once so the shared catalog includes
+the 149 additions.
+
 ## V74 Michigan expansion
 
 Baseline: V73.
