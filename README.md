@@ -1,5 +1,18 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V77.6 community alert retention
+
+Baseline: V77.5.
+
+- Keeps ride recommendations and ordinary condition observations visible for
+  48 hours.
+- Keeps fallen-tree observations visible for 7 days.
+- Keeps trail-maintenance observations visible for 14 days.
+- Riders can remove their own warning sooner by unchecking it or removing their
+  report; no new resolution controls were added.
+- Weather, rainfall, soil, rideability, readiness, trail catalog, cards, and map
+  behavior are unchanged.
+
 ## V77.5 official trail separation correction
 
 Baseline: V77.4.
