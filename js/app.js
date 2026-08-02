@@ -96,15 +96,7 @@ let communityReports=new Map();
 const reportSaveQueues=new Map();
 let adminSession=readJSON('ohioTrailAdminSession',null);
 let adminAuthenticated=false;
-const RETIRED_CATALOG_IDS=['germantown','lake-vesuvius','mikes','starhill-mrwzkfre','alum-p2'];
-const CANONICAL_TRAIL_OVERRIDES={
- 'alum-p1':{
-  name:'Alum Creek Trail System',
-  official:'https://www.combomtb.com/combo-trails',
-  mtbProject:'https://www.mtbproject.com/directory/8015214/alum-creek-state-park',
-  note:'Official Alum Creek riding area covering Phase 1 and Phase 2. The condition estimate uses the established Phase 1 weather sensitivity.'
- }
-};
+const RETIRED_CATALOG_IDS=['germantown','lake-vesuvius','mikes','starhill-mrwzkfre'];
 function readJSON(k,f){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(e){return f}}
 function stripGuessedSoil(trail){
  if(!trail||typeof trail!=='object')return trail;
@@ -119,7 +111,6 @@ function effectiveBaseTrail(t){return stripGuessedSoil(builtInOverrides[t.id]?{.
 function allManagedTrails(){
  const records=new Map(baseTrails.filter(t=>!RETIRED_CATALOG_IDS.includes(t.id)).map(t=>[t.id,{...t,source:'Built-in'}]));
  if(sharedTrails)sharedTrails.filter(t=>!RETIRED_CATALOG_IDS.includes(t.id)).forEach(t=>records.set(t.id,{...t,source:'Shared'}));
- Object.entries(CANONICAL_TRAIL_OVERRIDES).forEach(([id,override])=>{if(records.has(id))records.set(id,{...records.get(id),...override,id})});
  baseTrails.forEach(t=>{if(builtInOverrides[t.id])records.set(t.id,{...stripGuessedSoil({...t,...builtInOverrides[t.id],id:t.id}),source:'Local edit'})});
  customTrails.forEach(t=>records.set(t.id,{...stripGuessedSoil(t),source:'Local edit'}));
  return [...records.values()];

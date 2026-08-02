@@ -1,5 +1,18 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V77.5 official trail separation correction
+
+Baseline: V77.4.
+
+- Restores Alum Creek Phase 1 and Phase 2 as separate official trail cards and
+  separate condition-colored dots.
+- Keeps numbered marker clustering removed.
+- Corrects the duplicate audit: all 53 nearby pairs are separate named trail
+  systems or official trail phases; proximity alone is not treated as a
+  duplicate.
+- Selecting a state continues to filter its cards and dots and frame that state.
+- Rainfall, rideability, readiness, soil, weather, and trail data are unchanged.
+
 ## V77.4 duplicate consolidation and dot markers
 
 Baseline: V77.3.

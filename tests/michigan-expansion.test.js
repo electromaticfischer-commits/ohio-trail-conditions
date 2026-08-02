@@ -22,7 +22,7 @@ assert(michigan.filter(trail => profiles[trail.id].dominantSoil === 'Undetermine
 assert(michigan.filter(trail => profiles[trail.id].confidence === 'Low').every(trail => profiles[trail.id].sampleCoverage), 'Low-confidence soil must expose sample coverage');
 
 assert(html.includes('<option value="MI">Michigan</option>'), 'Michigan state filter missing');
-assert(html.includes('<span>v77.4</span>'), 'Visible current version missing');
+assert(html.includes('<span>v77.5</span>'), 'Visible current version missing');
 assert(source.includes('p_west:-90.5') && source.includes('p_north:48'), 'Michigan catalog boundary missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert(!source.includes('Mapped trail length:'), 'Trail length display returned');

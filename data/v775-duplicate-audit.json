@@ -1,0 +1,17 @@
+{
+  "version": "77.5",
+  "baseline": "77.4",
+  "scope": {
+    "states": ["OH", "WV", "IN", "PA", "MI"],
+    "packagedTrailsReviewed": 299,
+    "sameStatePairsWithinFiveMiles": 53
+  },
+  "rule": "A duplicate is more than one card for the same trail or riding-area record. Geographic proximity alone does not make separate parks, systems, or official trail phases duplicates.",
+  "result": {
+    "distinctNearbyPairsRetained": 53,
+    "duplicateRidingAreasConsolidated": 0,
+    "retiredIds": [],
+    "alumCreekDecision": "Retain Alum Creek Phase 1 and Phase 2 as separate official COMBO trails."
+  },
+  "mathChanged": false
+}
