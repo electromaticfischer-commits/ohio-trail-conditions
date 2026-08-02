@@ -1107,6 +1107,21 @@ function discoverMapArea(){
   );
   if(addDiscoveredTrails(candidates))render();
 }
+function selectState(){
+  const selectedState=document.getElementById('stateFilter').value;
+  if(selectedState==='all'){
+    discoverMapArea();
+    render();
+    return;
+  }
+  const stateTrails=catalog().filter(t=>t.stateCode===selectedState);
+  addDiscoveredTrails(stateTrails);
+  render();
+  const locations=stateTrails
+    .filter(t=>Number.isFinite(Number(t.lat))&&Number.isFinite(Number(t.lon)))
+    .map(t=>[Number(t.lat),Number(t.lon)]);
+  if(locations.length)map.fitBounds(L.latLngBounds(locations),{padding:[28,28]});
+}
 async function load(focusTrail=null){
   const generation=++loadGeneration;
   document.getElementById('trailList').innerHTML='<div class="loading">Loading nearby trails…</div>';
@@ -1369,7 +1384,7 @@ function renderAdmin(){
  document.querySelectorAll('[data-reset]').forEach(b=>b.onclick=()=>resetBuiltIn(b.dataset.reset));
 }
 function exportData(){const blob=new Blob([JSON.stringify({customTrails,hiddenTrailIds,deletedTrailIds,builtInOverrides},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ohio-trail-edits.json';a.click();URL.revokeObjectURL(a.href)}
-document.getElementById('search').addEventListener('input',render);document.getElementById('stateFilter').addEventListener('change',()=>{discoverMapArea();render()});document.getElementById('statusFilter').addEventListener('change',render);document.getElementById('sort').addEventListener('change',render);document.getElementById('locate').addEventListener('click',locate);
+document.getElementById('search').addEventListener('input',render);document.getElementById('stateFilter').addEventListener('change',selectState);document.getElementById('statusFilter').addEventListener('change',render);document.getElementById('sort').addEventListener('change',render);document.getElementById('locate').addEventListener('click',locate);
 function updateDeveloperUI(){
  const b=document.getElementById('developerMode'),manage=document.getElementById('manage'),signOut=document.getElementById('adminSignOut');
  b.textContent=adminAuthenticated?(developerMode?'Developer: On':'Developer: Signed in'):'Developer';

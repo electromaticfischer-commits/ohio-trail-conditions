@@ -11,7 +11,7 @@ const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 
 assert.strictEqual(inline, source.trim(), 'Inline application script must match js/app.js');
 assert(html.includes('<option value="all" selected>All states</option>'), 'All-states view must be the default');
-assert(html.includes('<span>v77.0</span>'), 'Visible V77.0 version missing');
+assert(html.includes('<span>v77.1</span>'), 'Visible V77.1 version missing');
 
 assert(source.includes("supabaseRpc('get_latest_trail_weather',{p_trail_ids:null})"), 'Frontend must load the shared weather cache');
 const loadSection = source.slice(source.indexOf('async function load(focusTrail=null)'), source.indexOf('function locate('));
@@ -19,6 +19,9 @@ assert(!loadSection.includes('fetchTrail('), 'Initial loading must not make one 
 assert(loadSection.includes('haversine(userLocation.lat,userLocation.lon,t.lat,t.lon)<=75'), 'Initial location discovery must include every trail within 75 miles');
 assert(source.includes('mapDiscoveryTimer=setTimeout(()=>discoverMapArea(),450)'), 'Moving the map must automatically discover its visible trails');
 assert(source.includes('if(loadedTrailIds.has(trail.id))return'), 'Previously loaded trails must be retained without duplicates');
+assert(source.includes("const stateTrails=catalog().filter(t=>t.stateCode===selectedState)"), 'Selecting a state must load its complete packaged catalog');
+assert(source.includes("map.fitBounds(L.latLngBounds(locations),{padding:[28,28]})"), 'Selecting a state must frame all of its trail markers');
+assert(source.includes("document.getElementById('stateFilter').addEventListener('change',selectState)"), 'State filter must use complete-state selection behavior');
 assert(source.includes("age>3*3600000"), 'Stale shared weather must be rejected');
 assert(source.includes("row.data_quality==='unavailable'"), 'Unavailable precipitation must withhold rideability');
 

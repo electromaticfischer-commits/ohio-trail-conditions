@@ -1,5 +1,16 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V77.1 state map framing
+
+Baseline: V77.0.
+
+- Selecting a state loads every packaged trail in that state before filtering.
+- The map automatically frames the selected state's complete trail catalog, so
+  trails outside the previous map view do not appear to disappear.
+- Returning to All states preserves the existing automatic map-discovery
+  behavior.
+- Rainfall, rideability, readiness, soil, weather, and trail data are unchanged.
+
 ## V77.0 shared weather and automatic discovery
 
 Baseline: V76.1.
