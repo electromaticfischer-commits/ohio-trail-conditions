@@ -1,5 +1,17 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V77.3 state map filtering with overlap handling
+
+Baseline: V77.2.
+
+- Selecting a state loads its complete catalog, filters both cards and map
+  markers, and frames the selected state.
+- Nearby markers are clustered at wide map views. The cluster count makes it
+  clear that multiple trails are present; clicking it zooms and separates them.
+- This prevents nearby systems such as Alum Creek Phase 1 and Phase 2 from
+  appearing to remove one another.
+- Rainfall, rideability, readiness, soil, weather, and trail data are unchanged.
+
 ## V77.2 persistent map markers
 
 Baseline: V77.1.
