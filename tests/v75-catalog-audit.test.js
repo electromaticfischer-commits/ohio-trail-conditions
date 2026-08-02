@@ -18,7 +18,7 @@ assert(['germantown','lake-vesuvius','mikes'].every(id=>!trails.some(trail=>trai
 assert(newIds.every(id=>profiles[id] && profiles[id].confidence!=='Low'), 'Every addition needs meaningful USDA soil coverage');
 assert(newIds.every(id=>{const trail=trails.find(item=>item.id===id);return trail.official&&trail.organization&&trail.trailforksUrl&&trail.routeSource?.url}), 'Addition source metadata is incomplete');
 assert.strictEqual(new Set(trails.map(trail=>trail.id)).size,trails.length,'Trail IDs must be unique');
-assert(html.includes('<span>v77.1</span>'),'Visible current version missing');
+assert(html.includes('<span>v77.2</span>'),'Visible current version missing');
 assert(source.includes("sharedTrails.filter(t=>!['germantown','lake-vesuvius','mikes','starhill-mrwzkfre'].includes(t.id))"),'Shared catalog retirement guard missing');
 assert.strictEqual(inline,source.trim(),'Inline application script does not match js/app.js');
 assert((sql.match(/insert into public\.trail_systems/g)||[]).length===15,'V75 SQL trail count is not 15');

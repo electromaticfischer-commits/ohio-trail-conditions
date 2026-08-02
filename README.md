@@ -1,5 +1,14 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V77.2 persistent map markers
+
+Baseline: V77.1.
+
+- The state menu filters the trail cards without moving or zooming the map.
+- Trails already loaded on the map stay visible when a state is selected.
+- Selecting a state still loads its complete packaged trail catalog.
+- Rainfall, rideability, readiness, soil, weather, and trail data are unchanged.
+
 ## V77.1 state map framing
 
 Baseline: V77.0.

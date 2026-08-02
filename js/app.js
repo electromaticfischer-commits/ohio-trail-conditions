@@ -857,7 +857,7 @@ function currentDistance(trail){
   if(!Number.isFinite(lat)||!Number.isFinite(lon)) return null;
   return haversine(userLocation.lat,userLocation.lon,lat,lon);
 }
-function sortedFiltered(){
+function sortedFiltered({allStates=false}={}){
   const q=document.getElementById('search').value.toLowerCase();
   const f=document.getElementById('statusFilter').value;
   const state=document.getElementById('stateFilter').value;
@@ -865,7 +865,7 @@ function sortedFiltered(){
 
   let a=results
     .map(r=>({...r,distance:currentDistance(r)}))
-    .filter(r=>(state==='all'||r.stateCode===state)&&(f==='all'||r.status.key===f)&&([r.name,r.region,r.stateCode||'',r.aliases||''].join(' ').toLowerCase().includes(q)));
+    .filter(r=>(allStates||state==='all'||r.stateCode===state)&&(f==='all'||r.status.key===f)&&([r.name,r.region,r.stateCode||'',r.aliases||''].join(' ').toLowerCase().includes(q)));
 
   if(s==='distance'){
     a.sort((x,y)=>{
@@ -954,7 +954,7 @@ function render(){
   if(userLocation){
     results=results.map(r=>({...r,distance:currentDistance(r)}));
   }
-  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div>${readyFactHtml(r.ready)}</div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div><div class="explain">${weatherSummary(r)}</div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
+  const arr=sortedFiltered(),mapArr=sortedFiltered({allStates:true});document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div>${readyFactHtml(r.ready)}</div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div><div class="explain">${weatherSummary(r)}</div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
 <button type="button" class="report-toggle" data-report-toggle="${r.id}" aria-expanded="false">
   <span><b>${communityHeading.title}</b><small class="community-summary">${communityHeading.summary}</small>${communityHeading.alert?`<small class="community-alert">${communityHeading.alert}</small>`:''}</span>
   <span class="chev">⌄</span>
@@ -992,7 +992,7 @@ document.querySelectorAll('[data-report-toggle]').forEach(btn=>btn.addEventListe
   if(open)syncMyReport(id);
 }));
 markers.forEach(m=>map.removeLayer(m));markers=[];
-arr.forEach(r=>{
+mapArr.forEach(r=>{
   const m=L.circleMarker([trailWeatherLat(r),trailWeatherLon(r)],{
     radius:8,
     weight:2,
@@ -1117,10 +1117,6 @@ function selectState(){
   const stateTrails=catalog().filter(t=>t.stateCode===selectedState);
   addDiscoveredTrails(stateTrails);
   render();
-  const locations=stateTrails
-    .filter(t=>Number.isFinite(Number(t.lat))&&Number.isFinite(Number(t.lon)))
-    .map(t=>[Number(t.lat),Number(t.lon)]);
-  if(locations.length)map.fitBounds(L.latLngBounds(locations),{padding:[28,28]});
 }
 async function load(focusTrail=null){
   const generation=++loadGeneration;
