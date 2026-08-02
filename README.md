@@ -1,5 +1,20 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V77.4 duplicate consolidation and dot markers
+
+Baseline: V77.3.
+
+- Removes numbered marker clustering and restores the original condition-colored
+  trail dots.
+- Audits all 53 same-state trail pairs whose centers are within five miles.
+- Keeps 52 pairs that are separate named riding areas.
+- Consolidates Alum Creek Phase 1 and Phase 2 into one Alum Creek Trail System
+  card and dot, using COMBO as the authoritative source.
+- Retires the second Alum Creek record from both packaged and shared runtime
+  catalogs so it cannot reappear when Supabase loads.
+- Selecting a state still filters its cards and dots and frames that state.
+- Rainfall, rideability, readiness, soil, and weather calculations are unchanged.
+
 ## V77.3 state map filtering with overlap handling
 
 Baseline: V77.2.

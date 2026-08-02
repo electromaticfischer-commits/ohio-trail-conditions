@@ -84,7 +84,7 @@ function normalizeDrainage(value){
 function closestLabel(value,labels){const n=Number(value);return Object.entries(labels).sort((a,b)=>Math.abs(Number(a[0])-n)-Math.abs(Number(b[0])-n))[0]?.[1]||'Unknown'}
 function shortSurface(value){return String(value).replace('Clay-heavy natural soil','Clay-heavy').replace('Loam/topsoil','Loam').replace('Sandy soil','Sandy').replace('Silty soil','Silty').replace('Rocky natural surface','Rocky').replace('Gravel/crushed stone','Gravel').replace('Machine-built aggregate','Aggregate').replace('Boardwalk/wood features','Wood features')}
 function trailCharacteristics(t){const profile=t.soilProfile;const mappedSoil=profile?`${profile.dominantSoil}${profile.secondarySoil?` • ${profile.secondarySoil}`:''}`:'Not mapped';const drainage=profile?.naturalDrainage||normalizeDrainage(t.drainage);const confidence=profile?.confidence||'Not rated';return `<div class="characteristics"><strong>Trail characteristics</strong><span><b>Mapped soil:</b> ${mappedSoil}</span><span><b>Natural drainage:</b> ${drainage}</span><span><b>Soil confidence:</b> ${confidence}</span><span><b>Rain sensitivity:</b> ${closestLabel(t.sensitivity,sensitivityLabels)}</span><span><b>Canopy:</b> ${closestLabel(t.canopy,canopyLabels)}</span></div>`}
-let results=[],markers=[],markerLayer=null,userLocation=null,userMarker=null,pickMode=false,pickTarget='access',pickMarker=null,selectedTrailId=null;
+let results=[],markers=[],userLocation=null,userMarker=null,pickMode=false,pickTarget='access',pickMarker=null,selectedTrailId=null;
 let cachedWeather=new Map(),loadedTrailIds=new Set(),mapDiscoveryTimer=null;
 let customTrails=readJSON('customTrails',[]);
 let developerMode=readJSON('developerMode',false);
@@ -96,6 +96,15 @@ let communityReports=new Map();
 const reportSaveQueues=new Map();
 let adminSession=readJSON('ohioTrailAdminSession',null);
 let adminAuthenticated=false;
+const RETIRED_CATALOG_IDS=['germantown','lake-vesuvius','mikes','starhill-mrwzkfre','alum-p2'];
+const CANONICAL_TRAIL_OVERRIDES={
+ 'alum-p1':{
+  name:'Alum Creek Trail System',
+  official:'https://www.combomtb.com/combo-trails',
+  mtbProject:'https://www.mtbproject.com/directory/8015214/alum-creek-state-park',
+  note:'Official Alum Creek riding area covering Phase 1 and Phase 2. The condition estimate uses the established Phase 1 weather sensitivity.'
+ }
+};
 function readJSON(k,f){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(e){return f}}
 function stripGuessedSoil(trail){
  if(!trail||typeof trail!=='object')return trail;
@@ -108,8 +117,9 @@ function stripGuessedSoil(trail){
 }
 function effectiveBaseTrail(t){return stripGuessedSoil(builtInOverrides[t.id]?{...t,...builtInOverrides[t.id],id:t.id}:t)}
 function allManagedTrails(){
- const records=new Map(baseTrails.map(t=>[t.id,{...t,source:'Built-in'}]));
- if(sharedTrails)sharedTrails.filter(t=>!['germantown','lake-vesuvius','mikes','starhill-mrwzkfre'].includes(t.id)).forEach(t=>records.set(t.id,{...t,source:'Shared'}));
+ const records=new Map(baseTrails.filter(t=>!RETIRED_CATALOG_IDS.includes(t.id)).map(t=>[t.id,{...t,source:'Built-in'}]));
+ if(sharedTrails)sharedTrails.filter(t=>!RETIRED_CATALOG_IDS.includes(t.id)).forEach(t=>records.set(t.id,{...t,source:'Shared'}));
+ Object.entries(CANONICAL_TRAIL_OVERRIDES).forEach(([id,override])=>{if(records.has(id))records.set(id,{...records.get(id),...override,id})});
  baseTrails.forEach(t=>{if(builtInOverrides[t.id])records.set(t.id,{...stripGuessedSoil({...t,...builtInOverrides[t.id],id:t.id}),source:'Local edit'})});
  customTrails.forEach(t=>records.set(t.id,{...stripGuessedSoil(t),source:'Local edit'}));
  return [...records.values()];
@@ -227,7 +237,6 @@ async function loadSharedData(){
 }
 const map=L.map('map').setView([39.5,-81.4],6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
-markerLayer=L.markerClusterGroup({showCoverageOnHover:false,spiderfyOnMaxZoom:true,maxClusterRadius:24,disableClusteringAtZoom:12}).addTo(map);
 let precipitationOverlay=null;
 let precipitationPeriod=null;
 let precipitationRequestId=0;
@@ -948,10 +957,7 @@ function selectTrail(id,{moveMap=true,scrollCard=false}={}){
     map.flyTo([lat,lon],Math.max(map.getZoom(),12),{duration:.65});
   }
   const marker=markers.find(m=>m.trailId===id);
-  if(marker){
-    if(markerLayer?.zoomToShowLayer)markerLayer.zoomToShowLayer(marker,()=>marker.openPopup());
-    else marker.openPopup();
-  }
+  if(marker)marker.openPopup();
 }
 
 function render(){
@@ -995,7 +1001,7 @@ document.querySelectorAll('[data-report-toggle]').forEach(btn=>btn.addEventListe
   btn.setAttribute('aria-expanded',String(open));
   if(open)syncMyReport(id);
 }));
-markerLayer.clearLayers();markers=[];
+markers.forEach(m=>map.removeLayer(m));markers=[];
 arr.forEach(r=>{
   const m=L.circleMarker([trailWeatherLat(r),trailWeatherLon(r)],{
     radius:8,
@@ -1011,7 +1017,7 @@ arr.forEach(r=>{
     sticky:true
   })
   .bindPopup(`<b>${r.name}</b><br>${r.rideability==null?'Rideability unavailable':r.rideability+'% rideability'}${r.distance!=null?'<br>'+r.distance.toFixed(1)+' miles away':''}`)
-  .addTo(markerLayer);
+  .addTo(map);
 
   m.trailId=r.id;
   m.on('click',()=>selectTrail(r.id,{moveMap:false,scrollCard:true}));

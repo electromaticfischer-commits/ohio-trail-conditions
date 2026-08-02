@@ -29,7 +29,7 @@ assert(additions.every(addition => trails.some(trail => trail.id === addition.id
 assert(additions.every(addition => profiles[addition.id]), 'Approved addition missing a soil profile');
 assert(additions.every(addition => addition.routeSource?.name === 'MTB Project riding area'), 'MTB-specific source metadata missing');
 assert(additions.every(addition => Number.isFinite(addition.lat) && Number.isFinite(addition.lon)), 'Riding-area center missing');
-assert(html.includes('<span>v77.3</span>'), 'Visible current version missing');
+assert(html.includes('<span>v77.4</span>'), 'Visible current version missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert.strictEqual((sql.match(/insert into public\.trail_systems/g) || []).length, 149, 'Supabase trail upsert count is incorrect');
 assert.strictEqual((sql.match(/insert into public\.trail_soil_profiles/g) || []).length, 149, 'Supabase soil upsert count is incorrect');

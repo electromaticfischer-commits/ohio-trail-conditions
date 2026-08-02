@@ -11,7 +11,7 @@ const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 
 assert.strictEqual(inline, source.trim(), 'Inline application script must match js/app.js');
 assert(html.includes('<option value="all" selected>All states</option>'), 'All-states view must be the default');
-assert(html.includes('<span>v77.3</span>'), 'Visible V77.3 version missing');
+assert(html.includes('<span>v77.4</span>'), 'Visible V77.4 version missing');
 
 assert(source.includes("supabaseRpc('get_latest_trail_weather',{p_trail_ids:null})"), 'Frontend must load the shared weather cache');
 const loadSection = source.slice(source.indexOf('async function load(focusTrail=null)'), source.indexOf('function locate('));
@@ -21,10 +21,9 @@ assert(source.includes('mapDiscoveryTimer=setTimeout(()=>discoverMapArea(),450)'
 assert(source.includes('if(loadedTrailIds.has(trail.id))return'), 'Previously loaded trails must be retained without duplicates');
 assert(source.includes("const stateTrails=catalog().filter(t=>t.stateCode===selectedState)"), 'Selecting a state must load its complete packaged catalog');
 assert(source.includes("map.fitBounds(L.latLngBounds(locations),{padding:[28,28]})"), 'State selection must frame its complete trail catalog');
-assert(source.includes('markerLayer=L.markerClusterGroup('), 'Overlapping trail markers must use clustering');
-assert(source.includes('markerLayer.clearLayers();markers=[];'), 'Filtered map markers must be rebuilt without stale states');
-assert(source.includes('.addTo(markerLayer);'), 'Trail markers must be added to the overlap-aware layer');
-assert(html.includes('leaflet.markercluster@1.5.3'), 'Marker clustering assets are missing');
+assert(source.includes('markers.forEach(m=>map.removeLayer(m));markers=[];'), 'Filtered dots must be rebuilt without stale states');
+assert(source.includes('.addTo(map);'), 'Trail dots must be added directly to the map');
+assert(!html.includes('leaflet.markercluster'), 'Numbered marker clustering must remain removed');
 assert(source.includes("document.getElementById('stateFilter').addEventListener('change',selectState)"), 'State filter must use complete-state selection behavior');
 assert(source.includes("age>3*3600000"), 'Stale shared weather must be rejected');
 assert(source.includes("row.data_quality==='unavailable'"), 'Unavailable precipitation must withhold rideability');
