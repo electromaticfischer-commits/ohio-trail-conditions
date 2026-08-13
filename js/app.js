@@ -370,7 +370,40 @@ function readyFactHtml(ready){
   return `<div class="fact"><b>${ready}</b><span>estimated ready</span></div>`;
 }
 function statusFrom(score,temp){if(temp<34&&score>32)return{key:'blue',label:'Freeze-thaw risk'};if(score<24)return{key:'green',label:'Likely good'};if(score<43)return{key:'yellow',label:'Use caution'};if(score<63)return{key:'orange',label:'Marginal'};return{key:'red',label:'Likely wet'}}
-function readyEstimate(score,d){if(score<24)return'Now';const h=Math.max(4,Math.round((score-20)/(2.4*d)));return h<24?`~${h} hr`:`~${Math.ceil(h/24)} day${Math.ceil(h/24)>1?'s':''}`}
+function readyHours(score,d){return score<24?0:Math.max(4,Math.round((score-20)/(2.4*d)))}
+function readyLabel(hours){const h=Math.max(0,Math.ceil(Number(hours)||0));return h<1?'Now':h<24?`~${h} hr`:`~${Math.ceil(h/24)} day${Math.ceil(h/24)>1?'s':''}`}
+function readyEstimate(score,d){return readyLabel(readyHours(score,d))}
+function clamp(min,max,value){return Math.max(min,Math.min(max,value))}
+function stormRecovery(t,weather,effectiveDrying){
+  const history=weather?.stormHistory||{};
+  const lastRainMs=new Date(history.lastRainAt||weather?.lastRainAt||0).getTime();
+  if(!Number.isFinite(lastRainMs)||lastRainMs<=0)return{active:false,tier:'routine',remainingHours:0,rideabilityFloor:100};
+  const peak24=Math.max(Number(history.peakRain24)||0,Number(weather?.rain24)||0);
+  const peak72=Math.max(Number(history.peakRain72)||0,Number(weather?.rain72)||0);
+  const peak1=Math.max(Number(history.peakRain1h)||0,Number(weather?.maxRain1h)||0);
+  const antecedent=Math.max(0,Number(history.antecedentRain168)||0);
+  const sensitivity=Number(t.sensitivity||1),canopy=Number(t.canopy||.82);
+  const vulnerability=clamp(.85,1.2,(sensitivity/Math.max(.65,effectiveDrying))*(.9+canopy*.15));
+  const thresholdScale=1/vulnerability;
+  let tier='routine',baseHours=0,minimumHours=0;
+  if(peak72>=4*thresholdScale||(antecedent>=3*thresholdScale&&peak24>=1*thresholdScale)){tier='extreme';baseHours=96;minimumHours=96}
+  else if(peak24>=2.5*thresholdScale||peak72>=3*thresholdScale||peak1>=1*thresholdScale){tier='severe';baseHours=72;minimumHours=60}
+  else if(peak24>=1.5*thresholdScale||peak72>=2*thresholdScale||(antecedent>=2*thresholdScale&&peak24>=.75*thresholdScale)){tier='heavy';baseHours=48;minimumHours=36}
+  else if(peak24>=.75*thresholdScale||peak72>=1*thresholdScale){tier='significant';baseHours=24;minimumHours=18}
+  if(tier==='routine')return{active:false,tier,remainingHours:0,rideabilityFloor:100};
+  const dryingWeather=clamp(.8,1.2,Number(history.dryingWeatherFactor)||1);
+  const requiredHours=Math.max(minimumHours,Math.round(baseHours*vulnerability/dryingWeather));
+  const elapsedHours=Math.max(0,(Date.now()-lastRainMs)/3600000);
+  const remainingHours=Math.max(0,requiredHours-elapsedHours);
+  return{active:remainingHours>0,tier,requiredHours,elapsedHours,remainingHours,rideabilityFloor:clamp(0,100,Math.round(elapsedHours/requiredHours*100)),peak24,peak72,peak1,antecedent};
+}
+function applyStormRecovery(t,weather,effectiveDrying,baseScore,temp){
+  const recovery=stormRecovery(t,weather,effectiveDrying);
+  if(!recovery.active)return{score:baseScore,rideability:Math.round(100-baseScore),status:statusFrom(baseScore,temp),ready:readyEstimate(baseScore,effectiveDrying),stormRecovery:recovery};
+  const score=Math.max(baseScore,100-recovery.rideabilityFloor);
+  const remaining=Math.max(readyHours(baseScore,effectiveDrying),recovery.remainingHours);
+  return{score,rideability:Math.round(100-score),status:statusFrom(score,temp),ready:readyLabel(remaining),stormRecovery:recovery};
+}
 function rideColor(r){if(r>=76)return'#237a43';if(r>=58)return'#ffd400';if(r>=38)return'#ef7b22';return'#c53131'}
 function formatInches(value){
   const n=Number(value);
@@ -653,10 +686,12 @@ async function fetchHistoricalOpenMeteo(t){
   const p=new URLSearchParams({
     latitude:trailWeatherLat(t),
     longitude:trailWeatherLon(t),
-    hourly:'precipitation',
-    start_date:isoDateUtc(now-4*86400000),
+    hourly:'temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m',
+    start_date:isoDateUtc(now-8*86400000),
     end_date:isoDateUtc(now),
     precipitation_unit:'inch',
+    temperature_unit:'fahrenheit',
+    wind_speed_unit:'mph',
     timeformat:'unixtime',
     timezone:'GMT'
   });
@@ -672,6 +707,19 @@ function rainfallFromHourly(hourly){
   const r48=sumRange(hourly.precipitation,hourly.time,48);
   const r72=sumRange(hourly.precipitation,hourly.time,72);
   return {r12,r24,r48,r72,r24Min:r24,r24Max:r24,r72Min:r72,r72Max:r72,sampleRadius:0,sampleCount:1,lastRain:lastRainLabel(hourly.precipitation,hourly.time)};
+}
+function historicalSignals(hourly){
+  const precipitation=hourly?.precipitation||[],times=hourly?.time||[],now=Date.now();
+  const rainy=precipitation.map((value,index)=>({value:Number(value)||0,time:timeMs(times[index]),index})).filter(point=>point.time<=now&&point.time>=now-168*3600000&&point.value>=.005);
+  const latest=rainy.at(-1);
+  if(!latest)return{lastRainAt:null,rain168:0,maxRain1h:0,stormHistory:null};
+  let eventStartIndex=latest.index,dryHours=0;
+  for(let index=latest.index-1;index>=0;index--){const timestamp=timeMs(times[index]);if(timestamp<now-168*3600000)break;if((Number(precipitation[index])||0)>=.005){eventStartIndex=index;dryHours=0}else if(++dryHours>=12)break}
+  const rain168=sumRange(precipitation,times,168);
+  const eventRain=precipitation.reduce((sum,value,index)=>index>=eventStartIndex&&timeMs(times[index])<=latest.time?sum+(Number(value)||0):sum,0);
+  const factors=times.map((value,index)=>({time:timeMs(value),temperature:Number(hourly.temperature_2m?.[index]),humidity:Number(hourly.relative_humidity_2m?.[index]),cloud:Number(hourly.cloud_cover?.[index]),wind:Number(hourly.wind_speed_10m?.[index])})).filter(point=>point.time>latest.time&&point.time<=now&&[point.temperature,point.humidity,point.cloud,point.wind].every(Number.isFinite)).map(point=>clamp(.55,1.45,1+(point.temperature-65)*.008+(point.wind-5)*.025-(point.humidity-65)*.006-(point.cloud-50)*.002));
+  const lastRainAt=new Date(latest.time).toISOString(),maxRain1h=Math.max(...rainy.map(point=>point.value),0);
+  return{lastRainAt,rain168,maxRain1h,stormHistory:{eventStartAt:new Date(timeMs(times[eventStartIndex])).toISOString(),lastRainAt,peakRain24:0,peakRain72:eventRain,peakRain1h:maxRain1h,antecedentRain168:Math.max(0,rain168-eventRain),rain168,dryingWeatherFactor:factors.length?factors.reduce((sum,value)=>sum+value,0)/factors.length:1}};
 }
 function mrmsLastRainLabel(rainfall,fallbackLabel){
   const r12=Number(rainfall?.r12)||0,r24=Number(rainfall?.r24)||0,r48=Number(rainfall?.r48)||0,r72=Number(rainfall?.r72)||0;
@@ -784,11 +832,14 @@ async function fetchTrail(t){
   const cp=Math.max(0,(cloud-55)*.08)*canopy;
   const dry=(Math.max(0,wind-3)*.55+Math.max(0,temp-55)*.16)*effectiveDrying;
   const cold=temp<38?(38-temp)*1.05:0;
-  const score=Math.max(0,Math.min(100,rain+sat+hp+cp+cold-dry));
+  const baseScore=Math.max(0,Math.min(100,rain+sat+hp+cp+cold-dry));
+  const signals=historicalHourly?historicalSignals(historicalHourly):{lastRainAt:null,rain168:0,maxRain1h:0,stormHistory:null};
+  if(signals.stormHistory){signals.stormHistory.peakRain24=Math.max(signals.stormHistory.peakRain24,r24);signals.stormHistory.peakRain72=Math.max(signals.stormHistory.peakRain72,r72)}
+  const model=applyStormRecovery(t,{...rainfall,...signals},effectiveDrying,baseScore,temp);
   const lastRain=rainDataUncertain&&rainSource==='Untrusted precipitation data'?'Uncertain':(rainfall.lastRain||fallback.lastRain);
-  const computedRideability=Math.round(100-score);
-  const computedStatus=statusFrom(score,temp);
-  const computedReady=readyEstimate(score,effectiveDrying);
+  const computedRideability=model.rideability;
+  const computedStatus=model.status;
+  const computedReady=model.ready;
 
   return{
     ...t,
@@ -797,7 +848,8 @@ async function fetchTrail(t){
     rain72Min:rainfall.r72Min ?? r72,rain72Max:rainfall.r72Max ?? r72,
     rainSampleRadius:rainfall.sampleRadius||0,rainSampleCount:rainfall.sampleCount||1,
     rainSource,rainWarning,rainDiagnostics,rainDataUncertain,
-    humidity:hum,wind,temperature:Number.isFinite(currentTemperature)?currentTemperature:temp,tempMin:temp,score,
+    humidity:hum,wind,temperature:Number.isFinite(currentTemperature)?currentTemperature:temp,tempMin:temp,score:model.score,
+    lastRainAt:signals.lastRainAt,rain168:signals.rain168,maxRain1h:signals.maxRain1h,stormHistory:signals.stormHistory,stormRecovery:model.stormRecovery,
     soilProfile,effectiveDrying,engineeredDryingFactor,
     rideability:rainSource==='Untrusted precipitation data'?null:computedRideability,
     status:rainSource==='Untrusted precipitation data'?{key:'yellow',label:'Rain data unavailable'}:computedStatus,
@@ -1068,7 +1120,8 @@ function trailFromCachedWeather(t,row){
   const cp=Math.max(0,(cloud-55)*.08)*canopy;
   const dry=(Math.max(0,wind-3)*.55+Math.max(0,temp-55)*.16)*effectiveDrying;
   const cold=temp<38?(38-temp)*1.05:0;
-  const score=Math.max(0,Math.min(100,rain+sat+hp+cp+cold-dry));
+  const baseScore=Math.max(0,Math.min(100,rain+sat+hp+cp+cold-dry));
+  const model=applyStormRecovery(t,weather,effectiveDrying,baseScore,temp);
   const unavailable=row.data_quality==='unavailable'||weather.rainSource==='Untrusted precipitation data';
   return {
     ...t,
@@ -1078,11 +1131,12 @@ function trailFromCachedWeather(t,row){
     rainSampleRadius:Number(weather.rainSampleRadius)||0,rainSampleCount:Number(weather.rainSampleCount)||1,
     rainSource:weather.rainSource||'Unavailable',rainWarning:weather.rainWarning||'',
     rainDiagnostics:weather.rainDiagnostics||{},rainDataUncertain:Boolean(weather.rainDataUncertain),
-    humidity:hum,wind,temperature:currentTemperature,tempMin:temp,score,
+    humidity:hum,wind,temperature:currentTemperature,tempMin:temp,score:model.score,
+    lastRainAt:weather.lastRainAt||null,rain168:Number(weather.rain168)||0,maxRain1h:Number(weather.maxRain1h)||0,stormHistory:weather.stormHistory||null,stormRecovery:model.stormRecovery,
     soilProfile,effectiveDrying,engineeredDryingFactor,
-    rideability:unavailable?null:Math.round(100-score),
-    status:unavailable?{key:'yellow',label:'Rain data unavailable'}:statusFrom(score,temp),
-    ready:unavailable?'Check official status':readyEstimate(score,effectiveDrying),
+    rideability:unavailable?null:model.rideability,
+    status:unavailable?{key:'yellow',label:'Rain data unavailable'}:model.status,
+    ready:unavailable?'Check official status':model.ready,
     distance:userLocation?haversine(userLocation.lat,userLocation.lon,t.lat,t.lon):null,
     weatherError:unavailable,
     weatherObservedAt:row.observed_at

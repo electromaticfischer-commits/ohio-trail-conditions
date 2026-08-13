@@ -276,14 +276,16 @@ async function fetchOpenMeteo(trails: Trail[], historical = false) {
   const params = new URLSearchParams({
     latitude: trails.map(trail => trail.weather_lat).join(','),
     longitude: trails.map(trail => trail.weather_lon).join(','),
-    hourly: historical ? 'precipitation' : 'temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m',
+    hourly: 'temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m',
     precipitation_unit: 'inch',
     timeformat: 'unixtime',
     timezone: 'GMT'
   });
   if (historical) {
-    params.set('start_date', dateUtc(Date.now() - 4 * 86400000));
+    params.set('start_date', dateUtc(Date.now() - 8 * 86400000));
     params.set('end_date', dateUtc(Date.now()));
+    params.set('temperature_unit', 'fahrenheit');
+    params.set('wind_speed_unit', 'mph');
   } else {
     params.set('past_hours', '18');
     params.set('forecast_hours', '48');
@@ -349,6 +351,67 @@ function lastRainLabel(values: unknown[], times: unknown[]) {
   if (hours < 1) return 'Now';
   if (hours < 48) return `${hours} hr ago`;
   return `${Math.max(2, Math.floor(hours / 24))} days ago`;
+}
+
+function historicalSignals(hourly: Record<string, unknown>) {
+  const precipitation = (hourly.precipitation || []) as unknown[];
+  const times = (hourly.time || []) as unknown[];
+  const now = Date.now();
+  const rainy = precipitation.map((value, index) => ({value: Number(value) || 0, time: timeMs(times[index]), index}))
+    .filter(point => point.time <= now && point.time >= now - 168 * 3600000 && point.value >= ZERO_EPSILON);
+  const latest = rainy.at(-1);
+  if (!latest) return {lastRainAt: null, rain168: 0, maxRain1h: 0, eventStartAt: null, eventRain: 0, antecedentRain168: 0, dryingWeatherFactor: 1};
+
+  let eventStartIndex = latest.index;
+  let dryHours = 0;
+  for (let index = latest.index - 1; index >= 0; index--) {
+    const timestamp = timeMs(times[index]);
+    if (timestamp < now - 168 * 3600000) break;
+    if ((Number(precipitation[index]) || 0) >= ZERO_EPSILON) {
+      eventStartIndex = index;
+      dryHours = 0;
+    } else if (++dryHours >= 12) break;
+  }
+
+  const rain168 = sumRange(precipitation, times, 168);
+  const eventRain = precipitation.reduce<number>((sum, value, index) => {
+    const timestamp = timeMs(times[index]);
+    return index >= eventStartIndex && timestamp <= latest.time ? sum + (Number(value) || 0) : sum;
+  }, 0);
+  const temperatures = (hourly.temperature_2m || []) as unknown[];
+  const humidity = (hourly.relative_humidity_2m || []) as unknown[];
+  const cloud = (hourly.cloud_cover || []) as unknown[];
+  const wind = (hourly.wind_speed_10m || []) as unknown[];
+  const dryingFactors = times.map((value, index) => ({
+    time: timeMs(value), temperature: Number(temperatures[index]), humidity: Number(humidity[index]),
+    cloud: Number(cloud[index]), wind: Number(wind[index])
+  })).filter(point => point.time > latest.time && point.time <= now && [point.temperature, point.humidity, point.cloud, point.wind].every(Number.isFinite))
+    .map(point => Math.max(0.55, Math.min(1.45, 1 + (point.temperature - 65) * 0.008 + (point.wind - 5) * 0.025 - (point.humidity - 65) * 0.006 - (point.cloud - 50) * 0.002)));
+  return {
+    lastRainAt: new Date(latest.time).toISOString(), rain168,
+    maxRain1h: Math.max(...rainy.map(point => point.value), 0),
+    eventStartAt: new Date(timeMs(times[eventStartIndex])).toISOString(), eventRain,
+    antecedentRain168: Math.max(0, rain168 - eventRain),
+    dryingWeatherFactor: dryingFactors.length ? dryingFactors.reduce((sum, value) => sum + value, 0) / dryingFactors.length : 1
+  };
+}
+
+function stormHistory(trail: Trail, rainfall: Rainfall, signals: ReturnType<typeof historicalSignals>) {
+  if (!signals.lastRainAt || !signals.eventStartAt) return null;
+  const previous = (trail.previous_result?.stormHistory || null) as Record<string, unknown> | null;
+  const previousEnd = previous?.lastRainAt ? new Date(String(previous.lastRainAt)).getTime() : NaN;
+  const eventStart = new Date(signals.eventStartAt).getTime();
+  const sameEvent = Number.isFinite(previousEnd) && eventStart <= previousEnd + 12 * 3600000;
+  return {
+    eventStartAt: sameEvent ? previous?.eventStartAt || signals.eventStartAt : signals.eventStartAt,
+    lastRainAt: signals.lastRainAt,
+    peakRain24: Math.max(sameEvent ? Number(previous?.peakRain24) || 0 : 0, Number(rainfall.r24) || 0),
+    peakRain72: Math.max(sameEvent ? Number(previous?.peakRain72) || 0 : 0, Number(rainfall.r72) || 0, signals.eventRain),
+    peakRain1h: Math.max(sameEvent ? Number(previous?.peakRain1h) || 0 : 0, signals.maxRain1h),
+    antecedentRain168: Math.max(sameEvent ? Number(previous?.antecedentRain168) || 0 : 0, signals.antecedentRain168),
+    rain168: signals.rain168,
+    dryingWeatherFactor: signals.dryingWeatherFactor
+  };
 }
 
 function rainfallFromHourly(hourly: Record<string, unknown>): Rainfall {
@@ -560,10 +623,12 @@ function buildResult(
   }
 
   const weather = weatherValues(liveHourly);
+  const signals = historicalSignals(historicalHourly || liveHourly);
+  const history = stormHistory(trail, rainfall, signals);
   return {
     quality,
     result: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       observedAt: new Date().toISOString(),
       sourceTimestamp: mrmsStats
         ? new Date(Number(mrmsStats[12].raster.validEndTime)).toISOString()
@@ -579,6 +644,10 @@ function buildResult(
       rainSampleRadius: rainfall.sampleRadius || 0,
       rainSampleCount: rainfall.sampleCount || 1,
       lastRain: quality === 'unavailable' ? 'Uncertain' : rainfall.lastRain,
+      lastRainAt: signals.lastRainAt,
+      rain168: signals.rain168,
+      maxRain1h: signals.maxRain1h,
+      stormHistory: history,
       rainSource,
       rainWarning,
       rainDataUncertain,

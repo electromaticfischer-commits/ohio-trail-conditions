@@ -1,5 +1,15 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V78.0 severe-storm recovery
+
+Baseline: V77.6.
+
+- Keeps NOAA MRMS as the primary 12/24/48/72-hour rainfall source.
+- Adds a separate recovery clock for significant, heavy, severe, and extreme storms so large events are not lost inside the capped rideability score.
+- Uses seven-day Open-Meteo hourly history only for rain timing, one-hour intensity, prior saturation, and drying weather since rain ended.
+- Adjusts thresholds for verified soil drying, rain sensitivity, and canopy. Clay-sensitive trails enter protection tiers sooner.
+- Severe storms retain at least a 60-hour recovery floor; extreme storms retain at least 96 hours. Missing rainfall still withholds rideability.
+
 ## V77.6 community alert retention
 
 Baseline: V77.5.

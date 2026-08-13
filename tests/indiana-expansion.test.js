@@ -21,7 +21,7 @@ assert(indiana.every(trail => /route|riding-area/.test(profiles[trail.id].sampli
 assert(indiana.filter(trail => profiles[trail.id].confidence === 'Low').every(trail => profiles[trail.id].sampleCoverage), 'Low-confidence soil must expose sample coverage');
 
 assert(html.includes('<option value="IN">Indiana</option>'), 'Indiana state filter missing');
-assert(html.includes('<span>v77.6</span>'), 'Visible current version missing');
+assert(html.includes('<span>v78.0</span>'), 'Visible current version missing');
 assert(source.includes('p_west:-90.5'), 'Current five-state catalog boundary missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert(!source.includes('Mapped trail length:'), 'Trail length display returned');
