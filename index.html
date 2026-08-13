@@ -501,6 +501,15 @@ function applyStormRecovery(t,weather,effectiveDrying,baseScore,temp){
   const remaining=Math.max(readyHours(baseScore,effectiveDrying),recovery.remainingHours);
   return{score,rideability:Math.round(100-score),status:statusFrom(score,temp),ready:readyLabel(remaining),stormRecovery:recovery};
 }
+function conservativeRainEnd(rainfall,lastRainAt){
+  const now=Date.now();let rainMs=new Date(lastRainAt||0).getTime();if(!Number.isFinite(rainMs))rainMs=0;
+  const r12=Number(rainfall?.r12)||0,r24=Number(rainfall?.r24)||0,r48=Number(rainfall?.r48)||0,r72=Number(rainfall?.r72)||0;
+  if(r12>=.005)rainMs=Math.max(rainMs,now-12*3600000);
+  else if(r24-r12>=.005)rainMs=Math.max(rainMs,now-24*3600000);
+  else if(r48-r24>=.005)rainMs=Math.max(rainMs,now-48*3600000);
+  else if(r72-r48>=.005)rainMs=Math.max(rainMs,now-72*3600000);
+  return rainMs?new Date(rainMs).toISOString():null;
+}
 function rideColor(r){if(r>=76)return'#237a43';if(r>=58)return'#ffd400';if(r>=38)return'#ef7b22';return'#c53131'}
 function formatInches(value){
   const n=Number(value);
@@ -931,7 +940,7 @@ async function fetchTrail(t){
   const cold=temp<38?(38-temp)*1.05:0;
   const baseScore=Math.max(0,Math.min(100,rain+sat+hp+cp+cold-dry));
   const signals=historicalHourly?historicalSignals(historicalHourly):{lastRainAt:null,rain168:0,maxRain1h:0,stormHistory:null};
-  if(signals.stormHistory){signals.stormHistory.peakRain24=Math.max(signals.stormHistory.peakRain24,r24);signals.stormHistory.peakRain72=Math.max(signals.stormHistory.peakRain72,r72)}
+  if(signals.stormHistory){signals.stormHistory.lastRainAt=conservativeRainEnd(rainfall,signals.stormHistory.lastRainAt);signals.lastRainAt=signals.stormHistory.lastRainAt;signals.stormHistory.peakRain24=Math.max(signals.stormHistory.peakRain24,r24);signals.stormHistory.peakRain72=Math.max(signals.stormHistory.peakRain72,r72)}
   const model=applyStormRecovery(t,{...rainfall,...signals},effectiveDrying,baseScore,temp);
   const lastRain=rainDataUncertain&&rainSource==='Untrusted precipitation data'?'Uncertain':(rainfall.lastRain||fallback.lastRain);
   const computedRideability=model.rideability;

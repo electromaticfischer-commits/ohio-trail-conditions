@@ -43,6 +43,8 @@ assert(context.stormRecovery(trail, weather(2.0, 2.4), 1).requiredHours <= sever
 const protectedModel = context.applyStormRecovery(slowClay, weather(2.2, 3.0, 24), 0.9, 10, 75);
 assert(protectedModel.rideability < 76, 'A severe event must not become green after only 24 hours');
 assert.notStrictEqual(protectedModel.ready, 'Now');
+const recentNoaa = context.conservativeRainEnd({r12:.2,r24:.2,r48:.2,r72:.2}, hoursAgo(36));
+assert((Date.now()-new Date(recentNoaa).getTime())/3600000<=12.01, 'NOAA recent-rain evidence must override an older comparison-source timestamp');
 
 assert(edge.includes("dateUtc(Date.now() - 8 * 86400000)"), 'Historical request must cover the prior week');
 assert(edge.includes('stormHistory: history'), 'Shared cache must publish persistent storm history');

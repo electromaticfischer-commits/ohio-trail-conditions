@@ -398,13 +398,20 @@ function historicalSignals(hourly: Record<string, unknown>) {
 
 function stormHistory(trail: Trail, rainfall: Rainfall, signals: ReturnType<typeof historicalSignals>) {
   if (!signals.lastRainAt || !signals.eventStartAt) return null;
+  const now = Date.now();
+  let lastRainMs = new Date(signals.lastRainAt).getTime();
+  if ((Number(rainfall.r12) || 0) >= ZERO_EPSILON) lastRainMs = Math.max(lastRainMs, now - 12 * 3600000);
+  else if ((Number(rainfall.r24) || 0) - (Number(rainfall.r12) || 0) >= ZERO_EPSILON) lastRainMs = Math.max(lastRainMs, now - 24 * 3600000);
+  else if ((Number(rainfall.r48) || 0) - (Number(rainfall.r24) || 0) >= ZERO_EPSILON) lastRainMs = Math.max(lastRainMs, now - 48 * 3600000);
+  else if ((Number(rainfall.r72) || 0) - (Number(rainfall.r48) || 0) >= ZERO_EPSILON) lastRainMs = Math.max(lastRainMs, now - 72 * 3600000);
+  const lastRainAt = new Date(lastRainMs).toISOString();
   const previous = (trail.previous_result?.stormHistory || null) as Record<string, unknown> | null;
   const previousEnd = previous?.lastRainAt ? new Date(String(previous.lastRainAt)).getTime() : NaN;
   const eventStart = new Date(signals.eventStartAt).getTime();
   const sameEvent = Number.isFinite(previousEnd) && eventStart <= previousEnd + 12 * 3600000;
   return {
     eventStartAt: sameEvent ? previous?.eventStartAt || signals.eventStartAt : signals.eventStartAt,
-    lastRainAt: signals.lastRainAt,
+    lastRainAt,
     peakRain24: Math.max(sameEvent ? Number(previous?.peakRain24) || 0 : 0, Number(rainfall.r24) || 0),
     peakRain72: Math.max(sameEvent ? Number(previous?.peakRain72) || 0 : 0, Number(rainfall.r72) || 0, signals.eventRain),
     peakRain1h: Math.max(sameEvent ? Number(previous?.peakRain1h) || 0 : 0, signals.maxRain1h),
@@ -644,7 +651,7 @@ function buildResult(
       rainSampleRadius: rainfall.sampleRadius || 0,
       rainSampleCount: rainfall.sampleCount || 1,
       lastRain: quality === 'unavailable' ? 'Uncertain' : rainfall.lastRain,
-      lastRainAt: signals.lastRainAt,
+      lastRainAt: history?.lastRainAt || signals.lastRainAt,
       rain168: signals.rain168,
       maxRain1h: signals.maxRain1h,
       stormHistory: history,
