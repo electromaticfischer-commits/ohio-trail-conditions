@@ -26,7 +26,7 @@
 </div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading nearby trails…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v78.1</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v78.2</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="adminLoginDialog" class="login-dialog">
 <div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
@@ -969,6 +969,54 @@ function weatherSummary(r){
   if(r.weatherError)return 'Weather unavailable.';
   return `Temperature ${Math.round(r.temperature)}°F, humidity ${Math.round(r.humidity)}%, wind ${Math.round(r.wind)} mph.`;
 }
+function olderRainAmount(r){
+  const rain168=Number(r.rain168),rain72=Number(r.rain72);
+  return Number.isFinite(rain168)&&Number.isFinite(rain72)?Math.max(0,rain168-rain72):0;
+}
+function rainfallSummaryHtml(r){
+  if(r.rideability==null)return '<div class="rain-summary rain-summary-unavailable"><strong>Rainfall unavailable</strong><span>12/24/72-hour totals could not be verified.</span></div>';
+  const earlier=olderRainAmount(r);
+  return `<div class="rain-summary" aria-label="Cumulative rainfall"><strong>Rainfall</strong><div class="rain-periods"><span><b>${formatInches(r.rain12)}</b><small>12 hr</small></span><span><b>${formatInches(r.rain24)}</b><small>24 hr</small></span><span><b>${formatInches(r.rain72)}</b><small>72 hr</small></span></div>${earlier>=.2?`<small class="rain-history">Plus ${formatInches(earlier)} from 3–7 days ago</small>`:''}</div>`;
+}
+function modelAssessment(r){
+  if(r.rideability==null)return 'Rainfall could not be verified, so the model is withholding a recommendation.';
+  const history=r.stormHistory||{};
+  const peak1=Math.max(Number(history.peakRain1h)||0,Number(r.maxRain1h)||0);
+  const earlier=olderRainAmount(r);
+  const sensitivity=Number(r.sensitivity)||1;
+  const dryingWeather=Number(history.dryingWeatherFactor)||1;
+  const profile=r.soilProfile||{};
+  const clay=/clay/i.test(`${profile.dominantSoil||''} ${profile.secondarySoil||''}`);
+  const soilDrying=Number(r.effectiveDrying)||Number(profile.soilDryingFactor)||1;
+  if(r.status?.key==='red'){
+    const reasons=[];
+    if(peak1>=.75)reasons.push('an intense downpour');
+    if(earlier>=.5)reasons.push('wet ground from earlier-week rain');
+    if(sensitivity>=1.15)reasons.push(clay?'rain-sensitive clay tread':'rain-sensitive tread');
+    if(dryingWeather<=.9)reasons.push('humid, calm drying weather');
+    return `Slower recovery expected: ${(reasons.length?reasons:['recent rainfall and current drying conditions']).slice(0,3).join(', ')}.`;
+  }
+  if(r.status?.key==='orange'){
+    const advantages=[];
+    if(peak1<.75&&Number(r.rain72)>=.75)advantages.push('rain fell more gradually');
+    if(sensitivity<1.15)advantages.push('the tread is less rain-sensitive');
+    if(soilDrying>=.93)advantages.push('drainage is somewhat better');
+    const lead=advantages.length?`Recovery is farther along because ${advantages.slice(0,2).join(' and ')}.`:'The trail is partway through its expected recovery.';
+    return earlier>=.2?`${lead} Earlier-week rain is still slowing the final recovery.`:lead;
+  }
+  if(r.status?.key==='yellow'){
+    const caution=[];
+    if(earlier>=.2)caution.push('earlier-week rain');
+    if(dryingWeather<=.9)caution.push('slow drying weather');
+    if(sensitivity>=1.15)caution.push('rain-sensitive tread');
+    return `Rideable with caution${caution.length?`; ${caution.slice(0,2).join(' and ')} may leave isolated soft areas`:''}.`;
+  }
+  const help=[];
+  if(Number(r.rain24)<.1)help.push('little new rain');
+  if(soilDrying>1.05)help.push('faster-draining tread');
+  if(dryingWeather>1.05)help.push('favorable drying weather');
+  return `Likely recovered${help.length?` because of ${help.slice(0,2).join(' and ')}`:''}.`;
+}
 function sampleHeatmapSvg(period){
   const points=Array.isArray(period?.sampleDetails)?period.sampleDetails:[];
   if(!points.length)return '<p class="diag-muted">No sample-point data available.</p>';
@@ -1114,7 +1162,7 @@ function render(){
   if(userLocation){
     results=results.map(r=>({...r,distance:currentDistance(r)}));
   }
-  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div><div class="fact"><b>${formatInches(r.rain72)}</b><span>total rain</span><small>last 72 hr</small></div>${readyFactHtml(r.ready)}</div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div><div class="explain">${weatherSummary(r)}</div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
+  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div>${readyFactHtml(r.ready)}</div>${rainfallSummaryHtml(r)}<div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div><div class="explain">${weatherSummary(r)}</div><div class="model-assessment"><strong>Model assessment</strong><span>${modelAssessment(r)}</span></div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
 <button type="button" class="report-toggle" data-report-toggle="${r.id}" aria-expanded="false">
   <span><b>${communityHeading.title}</b><small class="community-summary">${communityHeading.summary}</small>${communityHeading.alert?`<small class="community-alert">${communityHeading.alert}</small>`:''}</span>
   <span class="chev">⌄</span>

@@ -1,5 +1,18 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V78.2 visible rainfall context
+
+Baseline: V78.1.
+
+- Replaces the single 72-hour rain tile with a compact cumulative 12/24/72-hour
+  rainfall row.
+- Shows rain from 3–7 days ago only when at least 0.20 inch may still affect
+  saturation.
+- Adds a concise model assessment explaining storm intensity, prior rain,
+  trail sensitivity, soil drainage, and drying weather in plain language.
+- Keeps the rainfall, rideability, readiness, storm-recovery, community-report,
+  trail-data, and map calculations unchanged.
+
 ## V78.1 calibrated storm recovery
 
 Baseline: V78.0.
