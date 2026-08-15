@@ -389,7 +389,7 @@ function historicalSignals(hourly: Record<string, unknown>) {
     .map(point => Math.max(0.55, Math.min(1.45, 1 + (point.temperature - 65) * 0.008 + (point.wind - 5) * 0.025 - (point.humidity - 65) * 0.006 - (point.cloud - 50) * 0.002)));
   return {
     lastRainAt: new Date(latest.time).toISOString(), rain168,
-    maxRain1h: Math.max(...rainy.map(point => point.value), 0),
+    maxRain1h: Math.max(...rainy.filter(point => point.index >= eventStartIndex).map(point => point.value), 0),
     eventStartAt: new Date(timeMs(times[eventStartIndex])).toISOString(), eventRain,
     antecedentRain168: Math.max(0, rain168 - eventRain),
     dryingWeatherFactor: dryingFactors.length ? dryingFactors.reduce((sum, value) => sum + value, 0) / dryingFactors.length : 1
@@ -414,7 +414,7 @@ function stormHistory(trail: Trail, rainfall: Rainfall, signals: ReturnType<type
     lastRainAt,
     peakRain24: Math.max(sameEvent ? Number(previous?.peakRain24) || 0 : 0, Number(rainfall.r24) || 0),
     peakRain72: Math.max(sameEvent ? Number(previous?.peakRain72) || 0 : 0, Number(rainfall.r72) || 0, signals.eventRain),
-    peakRain1h: Math.max(sameEvent ? Number(previous?.peakRain1h) || 0 : 0, signals.maxRain1h),
+    peakRain1h: signals.maxRain1h,
     antecedentRain168: Math.max(sameEvent ? Number(previous?.antecedentRain168) || 0 : 0, signals.antecedentRain168),
     rain168: signals.rain168,
     dryingWeatherFactor: signals.dryingWeatherFactor

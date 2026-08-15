@@ -1,5 +1,23 @@
 # Ohio Trail Conditions NOAA Repair Build
 
+## V78.1 calibrated storm recovery
+
+Baseline: V78.0.
+
+- Corrects the hourly storm-intensity signal so it only uses rain from the
+  current storm event, rather than the largest hourly value anywhere in the
+  previous seven days.
+- Keeps severe-event protection, with 48-hour severe and 72-hour extreme
+  minimum recovery floors, while shortening the routine significant/heavy
+  tiers.
+- Treats yellow “Use caution” conditions as rideable now; the recovery clock
+  limits confidence without forcing every damp-but-rideable trail to remain
+  red.
+- Rebalances recent-rain and lingering-moisture penalties using observed
+  Mohican and Chestnut Ridge rideability as calibration checks.
+- Missing rainfall still withholds rideability, and official/community reports
+  continue to take precedence over the model.
+
 ## V78.0 severe-storm recovery
 
 Baseline: V77.6.

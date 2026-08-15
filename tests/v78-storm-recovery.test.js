@@ -9,7 +9,7 @@ const edge = fs.readFileSync(path.join(root, 'supabase', 'functions', 'weather-r
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 assert.strictEqual(inline, source.trim(), 'Inline application script must match js/app.js');
-assert(html.includes('<span>v78.0</span>'), 'Visible V78.0 version missing');
+assert(html.includes('<span>v78.1</span>'), 'Visible V78.1 version missing');
 
 const start = source.indexOf('function statusFrom(');
 const end = source.indexOf('function rideColor(');
@@ -33,7 +33,7 @@ assert.strictEqual(severe.tier, 'severe', 'Clay-sensitive trails must enter seve
 assert(severe.requiredHours >= 60 && severe.remainingHours > 48, 'Severe recovery must retain its minimum floor');
 const extreme = context.stormRecovery(trail, weather(3.5, 4.2), 1);
 assert.strictEqual(extreme.tier, 'extreme');
-assert(extreme.requiredHours >= 96, 'Extreme recovery must retain at least four days');
+assert(extreme.requiredHours >= 72, 'Extreme recovery must retain at least three days');
 const oneHour = context.stormRecovery(trail, weather(1.1, 1.1, 1, {peakRain1h: 1.05}), 1);
 assert.strictEqual(oneHour.tier, 'severe', 'One inch in one hour must trigger severe recovery');
 const saturated = context.stormRecovery(trail, weather(0.9, 1.1, 1, {antecedentRain168: 2.5}), 1);
@@ -49,6 +49,27 @@ assert((Date.now()-new Date(recentNoaa).getTime())/3600000<=12.01, 'NOAA recent-
 assert(edge.includes("dateUtc(Date.now() - 8 * 86400000)"), 'Historical request must cover the prior week');
 assert(edge.includes('stormHistory: history'), 'Shared cache must publish persistent storm history');
 assert(edge.includes('peakRain1h'), 'One-hour intensity must be retained');
+assert(edge.includes('rainy.filter(point => point.index >= eventStartIndex)'), 'One-hour intensity must be limited to the current storm event');
+assert(edge.includes('peakRain1h: signals.maxRain1h'), 'Persisted one-hour intensity must be replaced by the current-event maximum');
+assert(source.includes('rainy.filter(point=>point.index>=eventStartIndex)'), 'Direct weather must limit one-hour intensity to the current storm event');
+assert.strictEqual(context.readyHours(42, 1), 0, 'A caution/yellow trail must be considered rideable now');
+const cautionModel = context.applyStormRecovery(trail, weather(.1, .55, 2), 1, 5, 75);
+assert.strictEqual(cautionModel.status.key, 'yellow', 'A recent moderate event should retain a caution signal');
+assert.strictEqual(cautionModel.ready, 'Now', 'A caution/yellow trail must not show a contradictory future readiness time');
+const mohicanObserved = context.applyStormRecovery(
+  {sensitivity:1, canopy:.9},
+  weather(.3937, 1.2087, 25, {peakRain1h:.3937, antecedentRain168:2.54, dryingWeatherFactor:.8646}),
+  .95, 6, 74
+);
+assert.strictEqual(mohicanObserved.status.key, 'green', 'Mohican calibration should be rideable after the observed recovery period');
+assert.strictEqual(mohicanObserved.ready, 'Now');
+const chestnutObserved = context.applyStormRecovery(
+  {sensitivity:1.16, canopy:.82},
+  weather(.0158, .5512, 2, {peakRain1h:.0158, antecedentRain168:7.075, dryingWeatherFactor:.8725}),
+  .93, 7, 74
+);
+assert.strictEqual(chestnutObserved.status.key, 'yellow', 'Chestnut Ridge calibration should be rideable with caution after recent rain');
+assert.strictEqual(chestnutObserved.ready, 'Now');
 assert(source.includes("row.data_quality==='unavailable'"), 'Missing rainfall must still withhold rideability');
 
-console.log('V78 severe-storm recovery tests passed.');
+console.log('V78.1 calibrated storm-recovery tests passed.');

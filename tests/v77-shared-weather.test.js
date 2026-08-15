@@ -11,7 +11,7 @@ const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 
 assert.strictEqual(inline, source.trim(), 'Inline application script must match js/app.js');
 assert(html.includes('<option value="all" selected>All states</option>'), 'All-states view must be the default');
-assert(html.includes('<span>v78.0</span>'), 'Visible current version missing');
+assert(html.includes('<span>v78.1</span>'), 'Visible current version missing');
 
 assert(source.includes("supabaseRpc('get_latest_trail_weather',{p_trail_ids:null})"), 'Frontend must load the shared weather cache');
 const loadSection = source.slice(source.indexOf('async function load(focusTrail=null)'), source.indexOf('function locate('));
@@ -28,7 +28,7 @@ assert(source.includes("document.getElementById('stateFilter').addEventListener(
 assert(source.includes("age>3*3600000"), 'Stale shared weather must be rejected');
 assert(source.includes("row.data_quality==='unavailable'"), 'Unavailable precipitation must withhold rideability');
 
-const scoringFormula = 'const rain=(rain0to12*5+rain12to24*2.4+rain24to48*.8+rain48to72*.25)*sensitivity;';
+const scoringFormula = 'const rain=(rain0to12*2.6+rain12to24*1.45+rain24to48*.55+rain48to72*.2)*sensitivity;';
 assert.strictEqual(source.split(scoringFormula).length - 1, 2, 'Cached and direct paths must use the same rainfall scoring formula');
 
 assert(sql.includes('create or replace function public.get_latest_trail_weather'), 'Latest-weather RPC missing');
