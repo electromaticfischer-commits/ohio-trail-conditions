@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mountain Bike Trail Conditions</title>
-<meta name="theme-color" content="#173f2a">
+<title>CRUST | Mountain Bike Trail Conditions</title>
+<meta name="theme-color" content="#151515">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<header><div class="header-inner"><h1>Mountain Bike Trail Conditions</h1><div class="header-updated">Updated <span id="updated">–</span></div></div></header>
+<header><div class="header-inner"><div class="brand-lockup"><h1><img class="brand-logo" src="assets/crust-logo.png" alt="CRUST — Chase good dirt."></h1></div><div class="header-updated">Conditions refreshed <span id="updated">–</span></div></div></header>
 <main>
 <div id="pickBanner" class="pick-banner" aria-live="polite">
   <div><strong id="pickBannerTitle">Choose a location</strong><span>Click anywhere on the map. Press Esc or Cancel to stop.</span></div>
@@ -26,7 +26,7 @@
 </div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading nearby trails…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v78.2</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v79.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="adminLoginDialog" class="login-dialog">
 <div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
@@ -324,7 +324,7 @@ async function loadSharedData(){
  }
 }
 const map=L.map('map').setView([39.5,-81.4],6);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 let precipitationOverlay=null;
 let precipitationPeriod=null;
 let precipitationRequestId=0;
@@ -462,9 +462,9 @@ function lastRainLabel(values,times){
   return elapsedLabel(hours);
 }
 function readyFactHtml(ready){
-  if(ready==='Now')return '<div class="fact"><b>Ready now</b></div>';
-  if(ready==='Check official status')return '<div class="fact"><b>Check official status</b><span>readiness</span></div>';
-  return `<div class="fact"><b>${ready}</b><span>estimated ready</span></div>`;
+  if(ready==='Now')return '<div class="ready-tile"><span>Ready</span><b>Now</b></div>';
+  if(ready==='Check official status')return '<div class="ready-tile"><span>Ready</span><b>Check official</b></div>';
+  return `<div class="ready-tile"><span>Ready</span><b>${ready}</b></div>`;
 }
 function statusFrom(score,temp){if(temp<34&&score>32)return{key:'blue',label:'Freeze-thaw risk'};if(score<24)return{key:'green',label:'Likely good'};if(score<43)return{key:'yellow',label:'Use caution'};if(score<63)return{key:'orange',label:'Marginal'};return{key:'red',label:'Likely wet'}}
 function readyHours(score,d){return score<43?0:Math.max(4,Math.round((score-39)/(2.4*d)))}
@@ -819,14 +819,25 @@ function historicalSignals(hourly){
   const precipitation=hourly?.precipitation||[],times=hourly?.time||[],now=Date.now();
   const rainy=precipitation.map((value,index)=>({value:Number(value)||0,time:timeMs(times[index]),index})).filter(point=>point.time<=now&&point.time>=now-168*3600000&&point.value>=.005);
   const latest=rainy.at(-1);
-  if(!latest)return{lastRainAt:null,rain168:0,maxRain1h:0,stormHistory:null};
+  if(!latest)return{lastRainAt:null,rain168:0,maxRain1h:0,stormHistory:null,priorStormHistory:null};
+  const events=[];
+  rainy.forEach(point=>{
+    const current=events.at(-1);
+    if(!current||point.time-current.lastRainTime>=12*3600000)events.push({startTime:point.time,lastRainTime:point.time,eventRain:point.value,peakRain1h:point.value});
+    else{current.lastRainTime=point.time;current.eventRain+=point.value;current.peakRain1h=Math.max(current.peakRain1h,point.value)}
+  });
+  const priorEvent=events.filter(event=>{
+    const ageHours=(now-event.lastRainTime)/3600000;
+    return ageHours>72&&ageHours<=168;
+  }).sort((a,b)=>b.eventRain-a.eventRain)[0]||null;
+  const priorStormHistory=priorEvent?{eventStartAt:new Date(priorEvent.startTime).toISOString(),lastRainAt:new Date(priorEvent.lastRainTime).toISOString(),eventRain:priorEvent.eventRain,peakRain1h:priorEvent.peakRain1h}:null;
   let eventStartIndex=latest.index,dryHours=0;
   for(let index=latest.index-1;index>=0;index--){const timestamp=timeMs(times[index]);if(timestamp<now-168*3600000)break;if((Number(precipitation[index])||0)>=.005){eventStartIndex=index;dryHours=0}else if(++dryHours>=12)break}
   const rain168=sumRange(precipitation,times,168);
   const eventRain=precipitation.reduce((sum,value,index)=>index>=eventStartIndex&&timeMs(times[index])<=latest.time?sum+(Number(value)||0):sum,0);
   const factors=times.map((value,index)=>({time:timeMs(value),temperature:Number(hourly.temperature_2m?.[index]),humidity:Number(hourly.relative_humidity_2m?.[index]),cloud:Number(hourly.cloud_cover?.[index]),wind:Number(hourly.wind_speed_10m?.[index])})).filter(point=>point.time>latest.time&&point.time<=now&&[point.temperature,point.humidity,point.cloud,point.wind].every(Number.isFinite)).map(point=>clamp(.55,1.45,1+(point.temperature-65)*.008+(point.wind-5)*.025-(point.humidity-65)*.006-(point.cloud-50)*.002));
   const lastRainAt=new Date(latest.time).toISOString(),maxRain1h=Math.max(...rainy.filter(point=>point.index>=eventStartIndex).map(point=>point.value),0);
-  return{lastRainAt,rain168,maxRain1h,stormHistory:{eventStartAt:new Date(timeMs(times[eventStartIndex])).toISOString(),lastRainAt,peakRain24:0,peakRain72:eventRain,peakRain1h:maxRain1h,antecedentRain168:Math.max(0,rain168-eventRain),rain168,dryingWeatherFactor:factors.length?factors.reduce((sum,value)=>sum+value,0)/factors.length:1}};
+  return{lastRainAt,rain168,maxRain1h,priorStormHistory,stormHistory:{eventStartAt:new Date(timeMs(times[eventStartIndex])).toISOString(),lastRainAt,peakRain24:0,peakRain72:eventRain,peakRain1h:maxRain1h,antecedentRain168:Math.max(0,rain168-eventRain),rain168,dryingWeatherFactor:factors.length?factors.reduce((sum,value)=>sum+value,0)/factors.length:1}};
 }
 function mrmsLastRainLabel(rainfall,fallbackLabel){
   const r12=Number(rainfall?.r12)||0,r24=Number(rainfall?.r24)||0,r48=Number(rainfall?.r48)||0,r72=Number(rainfall?.r72)||0;
@@ -940,7 +951,7 @@ async function fetchTrail(t){
   const dry=(Math.max(0,wind-3)*.55+Math.max(0,temp-55)*.16)*effectiveDrying;
   const cold=temp<38?(38-temp)*1.05:0;
   const baseScore=Math.max(0,Math.min(100,rain+sat+hp+cp+cold-dry));
-  const signals=historicalHourly?historicalSignals(historicalHourly):{lastRainAt:null,rain168:0,maxRain1h:0,stormHistory:null};
+  const signals=historicalHourly?historicalSignals(historicalHourly):{lastRainAt:null,rain168:0,maxRain1h:0,stormHistory:null,priorStormHistory:null};
   if(signals.stormHistory){signals.stormHistory.lastRainAt=conservativeRainEnd(rainfall,signals.stormHistory.lastRainAt);signals.lastRainAt=signals.stormHistory.lastRainAt;signals.stormHistory.peakRain24=Math.max(signals.stormHistory.peakRain24,r24);signals.stormHistory.peakRain72=Math.max(signals.stormHistory.peakRain72,r72)}
   const model=applyStormRecovery(t,{...rainfall,...signals},effectiveDrying,baseScore,temp);
   const lastRain=rainDataUncertain&&rainSource==='Untrusted precipitation data'?'Uncertain':(rainfall.lastRain||fallback.lastRain);
@@ -956,7 +967,7 @@ async function fetchTrail(t){
     rainSampleRadius:rainfall.sampleRadius||0,rainSampleCount:rainfall.sampleCount||1,
     rainSource,rainWarning,rainDiagnostics,rainDataUncertain,
     humidity:hum,wind,temperature:Number.isFinite(currentTemperature)?currentTemperature:temp,tempMin:temp,score:model.score,
-    lastRainAt:signals.lastRainAt,rain168:signals.rain168,maxRain1h:signals.maxRain1h,stormHistory:signals.stormHistory,stormRecovery:model.stormRecovery,
+    lastRainAt:signals.lastRainAt,rain168:signals.rain168,maxRain1h:signals.maxRain1h,stormHistory:signals.stormHistory,priorStormHistory:signals.priorStormHistory,stormRecovery:model.stormRecovery,
     soilProfile,effectiveDrying,engineeredDryingFactor,
     rideability:rainSource==='Untrusted precipitation data'?null:computedRideability,
     status:rainSource==='Untrusted precipitation data'?{key:'yellow',label:'Rain data unavailable'}:computedStatus,
@@ -973,10 +984,32 @@ function olderRainAmount(r){
   const rain168=Number(r.rain168),rain72=Number(r.rain72);
   return Number.isFinite(rain168)&&Number.isFinite(rain72)?Math.max(0,rain168-rain72):0;
 }
+function stormEventContext(r){
+  const history=r.stormHistory||{};
+  const prior=r.priorStormHistory||{};
+  const recovery=r.stormRecovery||{};
+  const endedAt=new Date(history.lastRainAt||r.lastRainAt||0).getTime();
+  const ageHours=Number.isFinite(endedAt)&&endedAt>0?Math.max(0,(Date.now()-endedAt)/3600000):Infinity;
+  const currentEventTotal=Math.max(Number(history.peakRain72)||0,Number(r.rain72)||0);
+  const peak1=Math.max(Number(history.peakRain1h)||0,Number(r.maxRain1h)||0);
+  const tier=String(recovery.tier||'routine');
+  const currentMeaningful=tier!=='routine'||currentEventTotal>=.5||peak1>=.5;
+  const priorEndedAt=new Date(prior.lastRainAt||0).getTime();
+  const priorAgeHours=Number.isFinite(priorEndedAt)&&priorEndedAt>0?Math.max(0,(Date.now()-priorEndedAt)/3600000):Infinity;
+  const currentIsOlder=ageHours>72&&ageHours<=168;
+  const measuredOlderTotal=Math.max(0,Number(prior.eventRain)||0);
+  const fallbackOlderTotal=olderRainAmount(r);
+  const olderTotal=measuredOlderTotal||fallbackOlderTotal||(currentIsOlder?currentEventTotal:0);
+  const olderPeak=Math.max(Number(prior.peakRain1h)||0,currentIsOlder?peak1:0);
+  const olderHasExactTime=priorAgeHours>72&&priorAgeHours<=168;
+  const before72=(olderHasExactTime||currentIsOlder||fallbackOlderTotal>0)&&(olderTotal>=.5||olderPeak>=.5);
+  const eventAgeHours=olderHasExactTime?priorAgeHours:currentIsOlder?ageHours:Infinity;
+  return{eventTotal:olderTotal,eventLabel:Number.isFinite(eventAgeHours)?elapsedLabel(eventAgeHours):'3–7 days ago',within72:currentMeaningful&&ageHours<=72,before72};
+}
 function rainfallSummaryHtml(r){
   if(r.rideability==null)return '<div class="rain-summary rain-summary-unavailable"><strong>Rainfall unavailable</strong><span>12/24/72-hour totals could not be verified.</span></div>';
-  const earlier=olderRainAmount(r);
-  return `<div class="rain-summary" aria-label="Cumulative rainfall"><strong>Rainfall</strong><div class="rain-periods"><span><b>${formatInches(r.rain12)}</b><small>12 hr</small></span><span><b>${formatInches(r.rain24)}</b><small>24 hr</small></span><span><b>${formatInches(r.rain72)}</b><small>72 hr</small></span></div>${earlier>=.2?`<small class="rain-history">Plus ${formatInches(earlier)} from 3–7 days ago</small>`:''}</div>`;
+  const event=stormEventContext(r);
+  return `<div class="rain-summary" aria-label="Cumulative rainfall"><div class="rain-periods"><span class="rain-tile"><small>12 hr</small><b>${formatInches(r.rain12)}</b></span><span class="rain-tile"><small>24 hr</small><b>${formatInches(r.rain24)}</b></span><span class="rain-tile"><small>72 hr</small><b class="${event.within72?'storm-active':''}">${formatInches(r.rain72)}</b></span>${event.before72?`<span class="rain-tile event-tile"><small>${event.eventLabel}</small><b class="storm-active">${formatInches(event.eventTotal)}</b></span>`:''}</div></div>`;
 }
 function modelAssessment(r){
   if(r.rideability==null)return 'Rainfall could not be verified, so the model is withholding a recommendation.';
@@ -1162,7 +1195,7 @@ function render(){
   if(userLocation){
     results=results.map(r=>({...r,distance:currentDistance(r)}));
   }
-  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><span class="badge ${r.status.key}">${r.status.label}</span></div><div class="facts"><div class="fact"><b>${r.lastRain||'Unknown'}</b><span>last rain</span></div>${readyFactHtml(r.ready)}</div>${rainfallSummaryHtml(r)}<div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#a0a8a3':rideColor(r.rideability)}"></div></div><div class="explain">${weatherSummary(r)}</div><div class="model-assessment"><strong>Model assessment</strong><span>${modelAssessment(r)}</span></div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
+  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><div class="trail-flags">${readyFactHtml(r.ready)}<span class="badge ${r.status.key}">${r.status.label}</span></div></div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#737773':rideColor(r.rideability)}"></div></div><div class="model-assessment">${modelAssessment(r)}</div>${rainfallSummaryHtml(r)}<div class="explain">${weatherSummary(r)}</div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
 <button type="button" class="report-toggle" data-report-toggle="${r.id}" aria-expanded="false">
   <span><b>${communityHeading.title}</b><small class="community-summary">${communityHeading.summary}</small>${communityHeading.alert?`<small class="community-alert">${communityHeading.alert}</small>`:''}</span>
   <span class="chev">⌄</span>

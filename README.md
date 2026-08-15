@@ -827,3 +827,24 @@ Not verified:
 - Every addition received a fresh 17-location USDA SSURGO soil check with at least medium confidence.
 - The active catalog now contains 148 systems: Ohio 37, West Virginia 16, Indiana 26, Pennsylvania 28, and Michigan 41.
 - Rainfall retrieval, weather aging, rideability, readiness, community reporting, and card calculations were not changed.
+
+# V79.0 — CRUST redesign
+
+Baseline: the confirmed V78.2 site at commit `53c3e18`.
+
+- Renames and rebrands the public interface as CRUST with the supplied mountain-and-trail logo and the tagline “Chase good dirt.”
+- Uses a black CRUST header above a white and light-gray interface, with a darker gray page background so the cards remain distinct.
+- Keeps the original OpenStreetMap base layer and all existing Leaflet map behavior.
+- Reorganizes each trail card around the rideability progress bar, plain-language recovery explanation, 12/24/72-hour rain tiles, optional prior-storm tile, weather, trail information, and community reports.
+- Removes the separate last-rain tile. Ready and condition now appear as matching rectangular tiles with white condition text.
+- Shows a meaningful prior storm by age and total only after it has moved outside the 72-hour window; while it remains inside that window, the 72-hour total is emphasized in red.
+- Keeps a distinct 3–7-day storm visible when a newer shower occurs, so recent rain cannot hide important earlier saturation.
+- Does not change rainfall retrieval, rainfall weighting, rideability thresholds, readiness calculations, storm-recovery calculations, trail data, or community-report behavior.
+
+V79.0 verification:
+
+- JavaScript syntax and inline-package synchronization passed.
+- Rainfall-context, calibrated storm-recovery, missing-rain safeguards, community-alert, header, and visual regression checks passed.
+- Live NOAA MRMS checks passed at Columbus, Cleveland, and Cincinnati for 12/24/48/72 hours; all totals were numeric and monotonic at product time `2026-08-15T16:00:00Z`.
+- Browser testing at 1280px and 390px widths confirmed the original map, black logo header, white cards without shadows, equal-size Ready/Condition tiles, white condition text, responsive rainfall tiles, and no horizontal overflow.
+- The browser reported no console warnings or errors.

@@ -9,7 +9,7 @@ const edge = fs.readFileSync(path.join(root, 'supabase', 'functions', 'weather-r
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 assert.strictEqual(inline, source.trim(), 'Inline application script must match js/app.js');
-assert(html.includes('<span>v78.2</span>'), 'Visible V78.2 version missing');
+assert(html.includes('<span>v79.0</span>'), 'Visible V79.0 version missing');
 
 const start = source.indexOf('function statusFrom(');
 const end = source.indexOf('function rideColor(');

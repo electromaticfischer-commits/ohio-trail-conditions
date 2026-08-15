@@ -6,7 +6,7 @@ const html=fs.readFileSync(path.join(folder,'index.html'),'utf8');
 const source=fs.readFileSync(path.join(folder,'js','app.js'),'utf8');
 const css=fs.readFileSync(path.join(folder,'css','styles.css'),'utf8');
 
-assert(html.includes('<title>Mountain Bike Trail Conditions</title>'));
+assert(html.includes('<title>CRUST | Mountain Bike Trail Conditions</title>'));
 assert(!html.includes('id="goodCount"'));
 assert(!html.includes('id="bestTrail"'));
 assert(!html.includes('id="nearestTrail"'));
