@@ -848,3 +848,26 @@ V79.0 verification:
 - Live NOAA MRMS checks passed at Columbus, Cleveland, and Cincinnati for 12/24/48/72 hours; all totals were numeric and monotonic at product time `2026-08-15T16:00:00Z`.
 - Browser testing at 1280px and 390px widths confirmed the original map, black logo header, white cards without shadows, equal-size Ready/Condition tiles, white condition text, responsive rainfall tiles, and no horizontal overflow.
 - The browser reported no console warnings or errors.
+
+# V80.0 — Persistent moisture model
+
+Baseline: the live V79 CRUST site.
+
+- Adds a server-calculated shadow model with separate surface-moisture and subsurface-saturation reservoirs.
+- Preserves distinct storms for 14 days and separates events after 12 rain-free hours.
+- Ages moisture continuously according to trail sensitivity, canopy, researched soil drying, and accumulated hourly drying weather.
+- Adds Open-Meteo evapotranspiration, reference evapotranspiration, vapor-pressure deficit, and solar radiation to the shared weather request.
+- Calibrates the most recent 72-hour event volume to trusted NOAA MRMS while retaining Open-Meteo's hourly event timing.
+- Simulates five forecast days and requires six consecutive rideable hours before proposing a ready time.
+- Stores storm events and the latest moisture state in new protected Supabase tables.
+- Retains weather snapshots for 14 days instead of 48 hours to support replay and comparison.
+- Uses the V80 moisture result for the visible rideability, condition, readiness, and plain-language card explanation after a fresh V80 weather snapshot is available.
+- Falls back to V79 only for older cached snapshots that do not yet contain a V80 result.
+
+V80 intentionally defers:
+
+- Automatic ingestion of each land manager's official open/closed status.
+- GPX-based slope, aspect, drainage, and along-route soil sampling.
+- Calibration of modeled grid-cell soil moisture against trail observations.
+- Automatic calibration from community reports; reports remain comparison evidence until enough trustworthy observations exist.
+- Automatic model calibration against a larger set of verified ride reports.

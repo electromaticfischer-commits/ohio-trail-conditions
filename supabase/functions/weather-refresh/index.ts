@@ -1,6 +1,7 @@
 // Setup type definitions for built-in Supabase Runtime APIs.
 // @ts-ignore The jsr type package is resolved by the Supabase Edge runtime.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import {calculateShadowMoisture, MOISTURE_MODEL_VERSION} from '../_shared/moisture-model.js';
 
 // @ts-ignore Deno is provided by the Supabase Edge runtime.
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
@@ -23,6 +24,7 @@ const MONOTONIC_TOLERANCE = 0.03;
 const MIN_STORM_TOTAL = 0.20;
 const MAX_SOURCE_RATIO = 3;
 const TRUSTED_HOLD_MS = 24 * 60 * 60 * 1000;
+const MOISTURE_HISTORY_DAYS = 14;
 
 type Trail = {
   id: string;
@@ -276,19 +278,19 @@ async function fetchOpenMeteo(trails: Trail[], historical = false) {
   const params = new URLSearchParams({
     latitude: trails.map(trail => trail.weather_lat).join(','),
     longitude: trails.map(trail => trail.weather_lon).join(','),
-    hourly: 'temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m',
+    hourly: 'temperature_2m,relative_humidity_2m,precipitation,cloud_cover,wind_speed_10m,shortwave_radiation,vapour_pressure_deficit,evapotranspiration,et0_fao_evapotranspiration',
     precipitation_unit: 'inch',
     timeformat: 'unixtime',
     timezone: 'GMT'
   });
   if (historical) {
-    params.set('start_date', dateUtc(Date.now() - 8 * 86400000));
+    params.set('start_date', dateUtc(Date.now() - MOISTURE_HISTORY_DAYS * 86400000));
     params.set('end_date', dateUtc(Date.now()));
     params.set('temperature_unit', 'fahrenheit');
     params.set('wind_speed_unit', 'mph');
   } else {
     params.set('past_hours', '18');
-    params.set('forecast_hours', '48');
+    params.set('forecast_hours', '120');
     params.set('temperature_unit', 'fahrenheit');
     params.set('wind_speed_unit', 'mph');
   }
@@ -632,6 +634,23 @@ function buildResult(
   const weather = weatherValues(liveHourly);
   const signals = historicalSignals(historicalHourly || liveHourly);
   const history = stormHistory(trail, rainfall, signals);
+  const trailData = trail.data || {};
+  const soilProfile = (trailData.soilProfile || {}) as Record<string, unknown>;
+  const engineeredDryingFactor = Number(trailData.engineeredDryingFactor) || 1;
+  const soilDryingFactor = !/^Low$/i.test(String(soilProfile.confidence || 'Low'))
+    ? Number(soilProfile.soilDryingFactor) || 1
+    : 1;
+  const shadowModel = calculateShadowMoisture({
+    trail: {
+      ...trailData,
+      soilProfile,
+      effectiveDrying: soilDryingFactor * engineeredDryingFactor
+    },
+    historicalHourly: historicalHourly || liveHourly,
+    forecastHourly: liveHourly,
+    authoritativeRainfall: rainfall,
+    rainQuality: quality
+  });
   return {
     quality,
     result: {
@@ -655,6 +674,7 @@ function buildResult(
       rain168: signals.rain168,
       maxRain1h: signals.maxRain1h,
       stormHistory: history,
+      shadowModel,
       rainSource,
       rainWarning,
       rainDataUncertain,
@@ -726,12 +746,69 @@ async function saveSnapshots(state: string, trails: Trail[], openMeteo: Awaited<
     if (!response.ok) throw new Error(`Snapshot insert failed: ${await response.text()}`);
   }
 
-  const cutoff = new Date(Date.now() - 48 * 3600000).toISOString();
+  const moistureStates = rows.map(row => {
+    const result = row.result as Record<string, unknown>;
+    const shadow = result.shadowModel as Record<string, unknown> | undefined;
+    if (!shadow) return null;
+    return {
+      trail_id: row.trail_id,
+      model_version: String(shadow.modelVersion || MOISTURE_MODEL_VERSION),
+      calculated_at: shadow.calculatedAt,
+      surface_moisture: shadow.surfaceMoisture,
+      subsurface_saturation: shadow.subsurfaceSaturation,
+      wetness_score: shadow.wetnessScore,
+      rideability: shadow.rideability,
+      status: shadow.status,
+      ready_at: shadow.readyAt,
+      confidence: shadow.confidence,
+      details: shadow
+    };
+  }).filter(Boolean);
+  for (const group of chunks(moistureStates, 100)) {
+    const response = await rest('trail_moisture_states?on_conflict=trail_id', {
+      method: 'POST',
+      headers: {'prefer': 'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify(group)
+    });
+    if (!response.ok) throw new Error(`Moisture-state upsert failed: ${await response.text()}`);
+  }
+
+  const stormEvents = rows.flatMap(row => {
+    const result = row.result as Record<string, unknown>;
+    const shadow = result.shadowModel as Record<string, unknown> | undefined;
+    const events = Array.isArray(shadow?.eventHistory) ? shadow.eventHistory as Record<string, unknown>[] : [];
+    return events.map(event => ({
+      trail_id: row.trail_id,
+      event_started_at: event.startedAt,
+      event_ended_at: event.endedAt,
+      total_rain: event.totalRain,
+      peak_rain_1h: event.peakRain1h,
+      source_name: result.rainSource,
+      data_quality: row.data_quality,
+      model_version: String(shadow?.modelVersion || MOISTURE_MODEL_VERSION),
+      updated_at: observedAt
+    }));
+  });
+  for (const group of chunks(stormEvents, 100)) {
+    const response = await rest('trail_storm_events?on_conflict=trail_id,event_started_at', {
+      method: 'POST',
+      headers: {'prefer': 'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify(group)
+    });
+    if (!response.ok) throw new Error(`Storm-event upsert failed: ${await response.text()}`);
+  }
+
+  const cutoff = new Date(Date.now() - MOISTURE_HISTORY_DAYS * 24 * 3600000).toISOString();
   const cleanup = await rest(`trail_weather_snapshots?observed_at=lt.${encodeURIComponent(cutoff)}`, {
     method: 'DELETE',
     headers: {'prefer': 'return=minimal'}
   });
   if (!cleanup.ok) throw new Error(`Snapshot cleanup failed: ${await cleanup.text()}`);
+  const eventCleanup = await rest(`trail_storm_events?event_ended_at=lt.${encodeURIComponent(cutoff)}`, {
+    method: 'DELETE',
+    headers: {'prefer': 'return=minimal'}
+  });
+  if (!eventCleanup.ok) throw new Error(`Storm-event cleanup failed: ${await eventCleanup.text()}`);
   return rows;
 }
 

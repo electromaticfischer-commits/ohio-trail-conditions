@@ -373,6 +373,11 @@ function statusFrom(score,temp){if(temp<34&&score>32)return{key:'blue',label:'Fr
 function readyHours(score,d){return score<43?0:Math.max(4,Math.round((score-39)/(2.4*d)))}
 function readyLabel(hours){const h=Math.max(0,Math.ceil(Number(hours)||0));return h<1?'Now':h<24?`~${h} hr`:`~${Math.ceil(h/24)} day${Math.ceil(h/24)>1?'s':''}`}
 function readyEstimate(score,d){return readyLabel(readyHours(score,d))}
+function shadowReadyEstimate(readyAt){
+  if(!readyAt)return 'Beyond 5 days';
+  const remaining=(new Date(readyAt).getTime()-Date.now())/3600000;
+  return remaining<=0?'Now':readyLabel(remaining);
+}
 function clamp(min,max,value){return Math.max(min,Math.min(max,value))}
 function stormRecovery(t,weather,effectiveDrying){
   const history=weather?.stormHistory||{};
@@ -916,6 +921,24 @@ function rainfallSummaryHtml(r){
 }
 function modelAssessment(r){
   if(r.rideability==null)return 'Rainfall could not be verified, so the model is withholding a recommendation.';
+  if(r.moistureModel==='v80'&&r.shadowModel){
+    const shadow=r.shadowModel;
+    const surface=Number(shadow.surfaceMoisture)||0,subsurface=Number(shadow.subsurfaceSaturation)||0;
+    const biggest=shadow.biggestStorm||{};
+    const endedAt=new Date(biggest.endedAt||0).getTime();
+    const ageHours=Number.isFinite(endedAt)&&endedAt>0?Math.max(0,(Date.now()-endedAt)/3600000):null;
+    const storm=Number(biggest.totalRain)>=.5
+      ?`${formatInches(biggest.totalRain)} from ${ageHours==null?'the largest recent storm':elapsedLabel(ageHours)}`
+      :'recent rainfall';
+    if(r.status?.key==='red')return `Surface moisture and deeper saturation remain elevated after ${storm}; substantial recovery is still needed.`;
+    if(r.status?.key==='orange')return `The surface is recovering, but deeper moisture from ${storm} can still leave soft sections.`;
+    if(r.status?.key==='yellow')return subsurface>surface+8
+      ?`The surface has improved, but retained moisture from ${storm} may remain in slower-draining sections.`
+      :`Recovery is well underway after ${storm}; isolated wet or soft areas may remain.`;
+    return subsurface>=24
+      ?`The surface has dried and remaining deeper moisture is below the model's caution threshold.`
+      :`Both surface moisture and deeper saturation are low enough for likely good conditions.`;
+  }
   const history=r.stormHistory||{};
   const peak1=Math.max(Number(history.peakRain1h)||0,Number(r.maxRain1h)||0);
   const earlier=olderRainAmount(r);
@@ -993,6 +1016,15 @@ function rainfallDiagnosticsPanel(r){
   const safeguard=d.degraded?`<dt>Safeguard</dt><dd>${escapeHtml(d.degradedReason||'Suspicious all-zero precipitation field detected.')} ${d.safeguardSource?`Using ${escapeHtml(d.safeguardSource)}.`:''}</dd>`:'';
   const comparison=d.comparisonWarning?`<dt>Source comparison</dt><dd>${escapeHtml(d.comparisonWarning)}</dd>`:'';
   return `<details class="rain-diagnostics"><summary>Rainfall diagnostics</summary><div class="diag-status ${diagClass}">${diagText}</div><dl><dt>Weather coordinates</dt><dd>${coords}</dd><dt>Updated</dt><dd>${updated}</dd><dt>Conversion</dt><dd>Raw raster value ÷ 25.4 = inches</dd>${safeguard}${comparison}<dt>Historical fallback</dt><dd>${escapeHtml(d.historicalFallback||'not checked')}</dd><dt>Developer mode</dt><dd>${developerMode?'On — expanded technical data is available below':'Off'}</dd></dl><div class="diag-table-wrap"><table><thead><tr><th>Period</th><th>HTTP</th><th>Samples</th><th>Raw range</th><th>Median used</th><th>Time</th></tr></thead><tbody>${rows}</tbody></table></div>${developerDetails(d)}</details>`;
+}
+function shadowModelPanel(r){
+  if(!developerMode||!r.shadowModel)return '';
+  const shadow=r.shadowModel;
+  const previous=Number(r.legacyRideability),active=Number(r.rideability);
+  const delta=Number.isFinite(previous)&&Number.isFinite(active)?active-previous:null;
+  const biggest=shadow.biggestStorm||{};
+  const ready=shadow.readyAt?new Date(shadow.readyAt).getTime()<=Date.now()?'Now':new Date(shadow.readyAt).toLocaleString():'Beyond the five-day forecast';
+  return `<details class="rain-diagnostics shadow-model"><summary>V80 moisture details</summary><div class="diag-status diag-ok">V80 is the active card rating</div><dl><dt>V79 rideability</dt><dd>${Number.isFinite(previous)?previous+'%':'Unavailable'}</dd><dt>V80 rideability</dt><dd>${Number.isFinite(active)?active+'%':'Unavailable'}${delta==null?'':` (${delta>0?'+':''}${delta} points)`}</dd><dt>Surface moisture</dt><dd>${Number(shadow.surfaceMoisture).toFixed(1)}%</dd><dt>Subsurface saturation</dt><dd>${Number(shadow.subsurfaceSaturation).toFixed(1)}%</dd><dt>Largest 14-day storm</dt><dd>${Number.isFinite(Number(biggest.totalRain))?formatInches(biggest.totalRain):'None detected'}</dd><dt>Forecast ready</dt><dd>${escapeHtml(ready)}</dd><dt>Confidence</dt><dd>${escapeHtml(shadow.confidence||'Unknown')}</dd><dt>Model</dt><dd>${escapeHtml(shadow.modelVersion||'V80')}</dd></dl></details>`;
 }
 
 function currentDistance(trail){
@@ -1098,7 +1130,7 @@ function render(){
   if(userLocation){
     results=results.map(r=>({...r,distance:currentDistance(r)}));
   }
-  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><div class="trail-flags">${readyFactHtml(r.ready)}<span class="badge ${r.status.key}">${r.status.label}</span></div></div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#737773':rideColor(r.rideability)}"></div></div><div class="model-assessment">${modelAssessment(r)}</div>${rainfallSummaryHtml(r)}<div class="explain">${weatherSummary(r)}</div>${rainfallDiagnosticsPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
+  const arr=sortedFiltered();document.getElementById('trailList').innerHTML=arr.length?arr.map(r=>{const vote=getVotes(r.id),communityHeading=communityReportHeading(r.id);return `<article class="trail" id="trail-card-${r.id}" data-trail-card="${r.id}"><div class="trail-top"><div><h2><button type="button" class="trail-name-btn" data-select-trail="${r.id}" aria-label="Show ${r.name} on map">${r.name}</button></h2><div class="sub">${r.region} · ${r.distance==null?'Distance unavailable':r.distance.toFixed(1)+' mi away'}</div></div><div class="trail-flags">${readyFactHtml(r.ready)}<span class="badge ${r.status.key}">${r.status.label}</span></div></div><div class="ride-row"><span>Rideability</span><span>${r.rideability==null?'Unavailable':r.rideability+'%'}</span></div><div class="bar"><div style="width:${r.rideability==null?0:r.rideability}%;background:${r.rideability==null?'#737773':rideColor(r.rideability)}"></div></div><div class="model-assessment">${modelAssessment(r)}</div>${rainfallSummaryHtml(r)}<div class="explain">${weatherSummary(r)}</div>${rainfallDiagnosticsPanel(r)}${shadowModelPanel(r)}<details class="trail-links"><summary>Trail information</summary>${trailCharacteristics(r)}<div class="links">${r.official?`<a href="${r.official}" target="_blank">Official status</a>`:''}${r.mtbProject?`<a href="${r.mtbProject}" target="_blank">MTB Project</a>`:''}${r.trailforksUrl?`<a href="${r.trailforksUrl}" target="_blank">Trailforks</a>`:''}<a href="https://www.google.com/maps/search/?api=1&query=${r.lat},${r.lon}" target="_blank">Directions</a></div></details><div class="community">
 <button type="button" class="report-toggle" data-report-toggle="${r.id}" aria-expanded="false">
   <span><b>${communityHeading.title}</b><small class="community-summary">${communityHeading.summary}</small>${communityHeading.alert?`<small class="community-alert">${communityHeading.alert}</small>`:''}</span>
   <span class="chev">⌄</span>
@@ -1214,6 +1246,12 @@ function trailFromCachedWeather(t,row){
   const baseScore=Math.max(0,Math.min(100,rain+sat+hp+cp+cold-dry));
   const model=applyStormRecovery(t,weather,effectiveDrying,baseScore,temp);
   const unavailable=row.data_quality==='unavailable'||weather.rainSource==='Untrusted precipitation data';
+  const shadow=weather.shadowModel&&Number.isFinite(Number(weather.shadowModel.rideability))
+    ?weather.shadowModel
+    :null;
+  const activeRideability=shadow?Math.round(Number(shadow.rideability)):model.rideability;
+  const activeStatus=shadow&&shadow.status?.key&&shadow.status?.label?shadow.status:model.status;
+  const activeReady=shadow?shadowReadyEstimate(shadow.readyAt):model.ready;
   return {
     ...t,
     rain12:r12,rain24:r24,rain48:r48,rain72:r72,lastRain:unavailable?'Uncertain':weather.lastRain,
@@ -1223,11 +1261,11 @@ function trailFromCachedWeather(t,row){
     rainSource:weather.rainSource||'Unavailable',rainWarning:weather.rainWarning||'',
     rainDiagnostics:weather.rainDiagnostics||{},rainDataUncertain:Boolean(weather.rainDataUncertain),
     humidity:hum,wind,temperature:currentTemperature,tempMin:temp,score:model.score,
-    lastRainAt:weather.lastRainAt||null,rain168:Number(weather.rain168)||0,maxRain1h:Number(weather.maxRain1h)||0,stormHistory:weather.stormHistory||null,stormRecovery:model.stormRecovery,
+    lastRainAt:weather.lastRainAt||null,rain168:Number(weather.rain168)||0,maxRain1h:Number(weather.maxRain1h)||0,stormHistory:weather.stormHistory||null,priorStormHistory:weather.priorStormHistory||null,stormRecovery:model.stormRecovery,shadowModel:shadow,moistureModel:shadow?'v80':'v79-fallback',legacyRideability:model.rideability,
     soilProfile,effectiveDrying,engineeredDryingFactor,
-    rideability:unavailable?null:model.rideability,
-    status:unavailable?{key:'yellow',label:'Rain data unavailable'}:model.status,
-    ready:unavailable?'Check official status':model.ready,
+    rideability:unavailable?null:activeRideability,
+    status:unavailable?{key:'yellow',label:'Rain data unavailable'}:activeStatus,
+    ready:unavailable?'Check official status':activeReady,
     distance:userLocation?haversine(userLocation.lat,userLocation.lon,t.lat,t.lon):null,
     weatherError:unavailable,
     weatherObservedAt:row.observed_at
