@@ -9,7 +9,7 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 
 assert.strictEqual(inline, source.trim(), 'Inline application script must match js/app.js');
-assert(html.includes('<span>v80.0</span>'), 'Visible current version missing');
+assert(html.includes('<span>v80.1</span>'), 'Visible current version missing');
 assert(sql.includes("updated_at >= now() - interval '48 hours'"), '48-hour ordinary report window missing');
 assert(sql.includes("updated_at >= now() - interval '7 days'"), 'Seven-day fallen-tree window missing');
 assert(sql.includes("updated_at >= now() - interval '14 days'"), 'Fourteen-day maintenance window missing');

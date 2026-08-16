@@ -32,8 +32,9 @@ async function jsonGet(url,params){
   });
   const rasters={};
   for(const [hours,name] of Object.entries(products)){
-    const matches=catalog.features.filter(feature=>feature.attributes.idp_subset===name);
-    if(matches.length!==1)throw new Error(`${name}: expected one catalog item, received ${matches.length}`);
+    const matches=catalog.features.filter(feature=>feature.attributes.idp_subset===name)
+      .sort((a,b)=>b.attributes.idp_validendtime-a.attributes.idp_validendtime||b.attributes.objectid-a.attributes.objectid);
+    if(!matches.length)throw new Error(`${name}: no catalog item received`);
     rasters[hours]=matches[0].attributes;
   }
   const validTimes=Object.values(rasters).map(item=>item.idp_validendtime);

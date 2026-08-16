@@ -1,4 +1,4 @@
-export const MOISTURE_MODEL_VERSION = 'v80-shadow-1';
+export const MOISTURE_MODEL_VERSION = 'v80-active-2';
 
 const HOUR_MS = 3600000;
 const RAIN_THRESHOLD = 0.005;
@@ -56,17 +56,20 @@ export function trailHydrology(trail = {}) {
   };
 }
 
-export function stormEventsFromHourly(hourly = {}, now = Date.now(), lookbackDays = 14) {
+function rainPointsFromHourly(hourly = {}, now = Date.now(), lookbackDays = 14, minimumRain = RAIN_THRESHOLD) {
   const times = hourly.time || [];
   const precipitation = hourly.precipitation || [];
   const cutoff = now - lookbackDays * 24 * HOUR_MS;
-  const rainy = precipitation.map((value, index) => ({
+  return precipitation.map((value, index) => ({
     index,
     time: timeMs(times[index]),
     rain: Math.max(0, Number(value) || 0)
-  })).filter(point => point.time <= now && point.time >= cutoff && point.rain >= RAIN_THRESHOLD);
+  })).filter(point => point.time <= now && point.time >= cutoff && point.rain >= minimumRain);
+}
+
+function stormEventsFromPoints(rainy = []) {
   const events = [];
-  rainy.forEach(point => {
+  rainy.slice().sort((a, b) => a.time - b.time).forEach(point => {
     const event = events.at(-1);
     if (!event || point.time - event.endedAt >= 12 * HOUR_MS) {
       events.push({startedAt: point.time, endedAt: point.time, totalRain: point.rain, peakRain1h: point.rain});
@@ -85,29 +88,62 @@ export function stormEventsFromHourly(hourly = {}, now = Date.now(), lookbackDay
   }));
 }
 
-function calibrateRecentEvents(events, authoritativeRainfall, now, rainQuality) {
-  const target = Number(authoritativeRainfall?.r72);
-  if (rainQuality !== 'trusted' || !Number.isFinite(target) || target < 0) return events;
-  const cutoff = now - 72 * HOUR_MS;
-  const recent = events.filter(event => new Date(event.endedAt).getTime() >= cutoff);
-  const measured = recent.reduce((sum, event) => sum + event.totalRain, 0);
-  if (target >= RAIN_THRESHOLD && measured < RAIN_THRESHOLD) {
-    return [...events, {
-      startedAt: new Date(now - HOUR_MS).toISOString(),
-      endedAt: new Date(now - HOUR_MS).toISOString(),
-      totalRain: Number(target.toFixed(4)),
-      peakRain1h: Number(Math.min(target, Math.max(.01, target / 6)).toFixed(4)),
-      noaaCalibrated: true
-    }];
-  }
-  if (measured < RAIN_THRESHOLD) return events;
-  const ratio = clamp(.25, 4, target / measured);
-  return events.map(event => new Date(event.endedAt).getTime() < cutoff ? event : {
-    ...event,
-    totalRain: Number((event.totalRain * ratio).toFixed(4)),
-    peakRain1h: Number((event.peakRain1h * ratio).toFixed(4)),
-    noaaCalibrated: true
+export function stormEventsFromHourly(hourly = {}, now = Date.now(), lookbackDays = 14) {
+  return stormEventsFromPoints(rainPointsFromHourly(hourly, now, lookbackDays));
+}
+
+function authoritativeBands(authoritativeRainfall) {
+  const raw = [12, 24, 48, 72].map(hours => Number(authoritativeRainfall?.[`r${hours}`]));
+  if (raw.some(value => !Number.isFinite(value) || value < 0)) return null;
+  const cumulative = [];
+  raw.forEach((value, index) => cumulative.push(Math.max(value, index ? cumulative[index - 1] : 0)));
+  return [
+    {label: '0-12', from: 0, to: 12, target: cumulative[0]},
+    {label: '12-24', from: 12, to: 24, target: cumulative[1] - cumulative[0]},
+    {label: '24-48', from: 24, to: 48, target: cumulative[2] - cumulative[1]},
+    {label: '48-72', from: 48, to: 72, target: cumulative[3] - cumulative[2]}
+  ];
+}
+
+function reconcileRecentRain(hourly, authoritativeRainfall, now, rainQuality) {
+  const rawPoints = rainPointsFromHourly(hourly, now, 14, Number.EPSILON);
+  const bands = rainQuality === 'trusted' ? authoritativeBands(authoritativeRainfall) : null;
+  if (!bands) return {events: stormEventsFromPoints(rawPoints.filter(point => point.rain >= RAIN_THRESHOLD)), rainBalance: null};
+
+  const older = rawPoints.filter(point => now - point.time > 72 * HOUR_MS && point.rain >= RAIN_THRESHOLD);
+  const recent = [];
+  const balanceBands = bands.map(band => {
+    const source = rawPoints.filter(point => {
+      const ageHours = (now - point.time) / HOUR_MS;
+      return ageHours >= band.from && ageHours < band.to;
+    });
+    const measured = source.reduce((sum, point) => sum + point.rain, 0);
+    if (band.target > 0) {
+      if (measured > 0) {
+        source.forEach(point => recent.push({...point, rain: point.rain / measured * band.target, noaaReconciled: true}));
+      } else {
+        recent.push({
+          time: now - (band.from + 1) * HOUR_MS,
+          rain: band.target,
+          noaaReconciled: true,
+          syntheticTiming: true
+        });
+      }
+    }
+    return {band: band.label, target: Number(band.target.toFixed(4)), measured: Number(measured.toFixed(4)), allocated: Number(band.target.toFixed(4))};
   });
+  const events = stormEventsFromPoints([...older, ...recent]);
+  const target72 = bands.reduce((sum, band) => sum + band.target, 0);
+  const allocated72 = recent.reduce((sum, point) => sum + point.rain, 0);
+  return {
+    events,
+    rainBalance: {
+      bands: balanceBands,
+      target72: Number(target72.toFixed(4)),
+      allocated72: Number(allocated72.toFixed(4)),
+      balanced: Math.abs(target72 - allocated72) < .0001
+    }
+  };
 }
 
 function effectiveDryingHours(hourly, afterMs, now) {
@@ -139,6 +175,11 @@ function modelStatus(wetness) {
   return {key: 'red', label: 'Likely wet'};
 }
 
+function isRideableMoisture(surface, subsurface) {
+  const wetness = combineLoads([surface, subsurface * .78]);
+  return wetness < 43 && surface < 38 && subsurface < 45;
+}
+
 function forecastReadiness(surface, subsurface, hydrology, forecastHourly, now) {
   const times = forecastHourly?.time || [];
   let safeHours = 0;
@@ -154,8 +195,7 @@ function forecastReadiness(surface, subsurface, hydrology, forecastHourly, now) 
       surface = combineLoads([surface, impulse.surface]);
       subsurface = combineLoads([subsurface, impulse.subsurface]);
     }
-    const wetness = combineLoads([surface, subsurface * .78]);
-    safeHours = wetness < 43 ? safeHours + 1 : 0;
+    safeHours = isRideableMoisture(surface, subsurface) ? safeHours + 1 : 0;
     if (safeHours >= 6) return new Date(timestamp - 5 * HOUR_MS).toISOString();
   }
   return null;
@@ -163,9 +203,8 @@ function forecastReadiness(surface, subsurface, hydrology, forecastHourly, now) 
 
 export function calculateShadowMoisture({trail = {}, historicalHourly = {}, forecastHourly = {}, authoritativeRainfall = null, now = Date.now(), rainQuality = 'trusted'} = {}) {
   const hydrology = trailHydrology(trail);
-  const events = calibrateRecentEvents(
-    stormEventsFromHourly(historicalHourly, now, 14), authoritativeRainfall, now, rainQuality
-  );
+  const reconciliation = reconcileRecentRain(historicalHourly, authoritativeRainfall, now, rainQuality);
+  const events = reconciliation.events;
   const surfaceLoads = [];
   const subsurfaceLoads = [];
   events.forEach(event => {
@@ -180,10 +219,16 @@ export function calculateShadowMoisture({trail = {}, historicalHourly = {}, fore
   const wetnessScore = Math.round(combineLoads([surfaceMoisture, subsurfaceSaturation * .78]));
   const rideability = 100 - wetnessScore;
   const status = modelStatus(wetnessScore);
-  const readyAt = wetnessScore < 43 ? new Date(now).toISOString() : forecastReadiness(
+  const recentRain12 = Math.max(0, Number(authoritativeRainfall?.r12) || 0);
+  const readyNow = isRideableMoisture(surfaceMoisture, subsurfaceSaturation) && recentRain12 < .25;
+  const readyAt = readyNow ? new Date(now).toISOString() : forecastReadiness(
     surfaceMoisture, subsurfaceSaturation, hydrology, forecastHourly, now
   );
   const biggestStorm = events.slice().sort((a, b) => b.totalRain - a.totalRain)[0] || null;
+  const cardStorm = events.filter(event => {
+    const ageHours = (now - new Date(event.endedAt).getTime()) / HOUR_MS;
+    return ageHours > 72 && ageHours <= 168 && event.totalRain >= .5;
+  }).sort((a, b) => b.totalRain - a.totalRain)[0] || null;
   const soilConfidence = String(trail.soilProfile?.confidence || 'Low');
   const confidence = rainQuality === 'trusted' && !/^Low$/i.test(soilConfidence)
     ? 'Medium-high'
@@ -205,7 +250,9 @@ export function calculateShadowMoisture({trail = {}, historicalHourly = {}, fore
       subsurfaceHalfLifeHours: Number(hydrology.subsurfaceHalfLifeHours.toFixed(1))
     },
     eventHistory: events,
+    rainBalance: reconciliation.rainBalance,
     totalRain14d: Number(events.reduce((sum, event) => sum + event.totalRain, 0).toFixed(3)),
-    biggestStorm
+    biggestStorm,
+    cardStorm
   };
 }

@@ -26,7 +26,7 @@
 </div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading nearby trails…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v80.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v80.1</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="adminLoginDialog" class="login-dialog">
 <div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
@@ -991,6 +991,23 @@ function olderRainAmount(r){
   return Number.isFinite(rain168)&&Number.isFinite(rain72)?Math.max(0,rain168-rain72):0;
 }
 function stormEventContext(r){
+  if(r.moistureModel==='v80'&&r.shadowModel?.rainBalance){
+    const shadow=r.shadowModel;
+    const recent=(shadow.eventHistory||[]).filter(event=>{
+      const age=(Date.now()-new Date(event.endedAt||0).getTime())/3600000;
+      return age>=0&&age<=72;
+    });
+    const activeRecent=recent.some(event=>Number(event.totalRain)>=.5||Number(event.peakRain1h)>=.5)||Number(r.rain72)>=.5;
+    const older=shadow.cardStorm||null;
+    const olderEndedAt=new Date(older?.endedAt||0).getTime();
+    const olderAge=Number.isFinite(olderEndedAt)&&olderEndedAt>0?(Date.now()-olderEndedAt)/3600000:Infinity;
+    return{
+      eventTotal:Number(older?.totalRain)||0,
+      eventLabel:Number.isFinite(olderAge)?elapsedLabel(olderAge):'3–7 days ago',
+      within72:activeRecent,
+      before72:Boolean(older)
+    };
+  }
   const history=r.stormHistory||{};
   const prior=r.priorStormHistory||{};
   const recovery=r.stormRecovery||{};
@@ -1022,7 +1039,7 @@ function modelAssessment(r){
   if(r.moistureModel==='v80'&&r.shadowModel){
     const shadow=r.shadowModel;
     const surface=Number(shadow.surfaceMoisture)||0,subsurface=Number(shadow.subsurfaceSaturation)||0;
-    const biggest=shadow.biggestStorm||{};
+    const biggest=shadow.cardStorm||shadow.biggestStorm||{};
     const endedAt=new Date(biggest.endedAt||0).getTime();
     const ageHours=Number.isFinite(endedAt)&&endedAt>0?Math.max(0,(Date.now()-endedAt)/3600000):null;
     const storm=Number(biggest.totalRain)>=.5
@@ -1122,7 +1139,9 @@ function shadowModelPanel(r){
   const delta=Number.isFinite(previous)&&Number.isFinite(active)?active-previous:null;
   const biggest=shadow.biggestStorm||{};
   const ready=shadow.readyAt?new Date(shadow.readyAt).getTime()<=Date.now()?'Now':new Date(shadow.readyAt).toLocaleString():'Beyond the five-day forecast';
-  return `<details class="rain-diagnostics shadow-model"><summary>V80 moisture details</summary><div class="diag-status diag-ok">V80 is the active card rating</div><dl><dt>V79 rideability</dt><dd>${Number.isFinite(previous)?previous+'%':'Unavailable'}</dd><dt>V80 rideability</dt><dd>${Number.isFinite(active)?active+'%':'Unavailable'}${delta==null?'':` (${delta>0?'+':''}${delta} points)`}</dd><dt>Surface moisture</dt><dd>${Number(shadow.surfaceMoisture).toFixed(1)}%</dd><dt>Subsurface saturation</dt><dd>${Number(shadow.subsurfaceSaturation).toFixed(1)}%</dd><dt>Largest 14-day storm</dt><dd>${Number.isFinite(Number(biggest.totalRain))?formatInches(biggest.totalRain):'None detected'}</dd><dt>Forecast ready</dt><dd>${escapeHtml(ready)}</dd><dt>Confidence</dt><dd>${escapeHtml(shadow.confidence||'Unknown')}</dd><dt>Model</dt><dd>${escapeHtml(shadow.modelVersion||'V80')}</dd></dl></details>`;
+  const balance=shadow.rainBalance;
+  const balanceText=balance?`${formatInches(balance.allocated72)} allocated of ${formatInches(balance.target72)} NOAA total${balance.balanced?' — balanced':' — mismatch'}`:'Unavailable';
+  return `<details class="rain-diagnostics shadow-model"><summary>V80 moisture details</summary><div class="diag-status diag-ok">V80 is the active card rating</div><dl><dt>V79 rideability</dt><dd>${Number.isFinite(previous)?previous+'%':'Unavailable'}</dd><dt>V80 rideability</dt><dd>${Number.isFinite(active)?active+'%':'Unavailable'}${delta==null?'':` (${delta>0?'+':''}${delta} points)`}</dd><dt>Surface moisture</dt><dd>${Number(shadow.surfaceMoisture).toFixed(1)}%</dd><dt>Subsurface saturation</dt><dd>${Number(shadow.subsurfaceSaturation).toFixed(1)}%</dd><dt>72-hour rain balance</dt><dd>${balanceText}</dd><dt>Largest 14-day storm</dt><dd>${Number.isFinite(Number(biggest.totalRain))?formatInches(biggest.totalRain):'None detected'}</dd><dt>Forecast ready</dt><dd>${escapeHtml(ready)}</dd><dt>Confidence</dt><dd>${escapeHtml(shadow.confidence||'Unknown')}</dd><dt>Model</dt><dd>${escapeHtml(shadow.modelVersion||'V80')}</dd></dl></details>`;
 }
 
 function currentDistance(trail){

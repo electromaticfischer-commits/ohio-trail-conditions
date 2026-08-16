@@ -9,7 +9,7 @@ const edge = fs.readFileSync(path.join(root, 'supabase', 'functions', 'weather-r
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 assert.strictEqual(inline, source.trim(), 'Inline application script must match js/app.js');
-assert(html.includes('<span>v80.0</span>'), 'Visible V80.0 version missing');
+assert(html.includes('<span>v80.1</span>'), 'Visible V80.1 version missing');
 
 const start = source.indexOf('function statusFrom(');
 const end = source.indexOf('function rideColor(');
@@ -47,7 +47,7 @@ const recentNoaa = context.conservativeRainEnd({r12:.2,r24:.2,r48:.2,r72:.2}, ho
 assert((Date.now()-new Date(recentNoaa).getTime())/3600000<=12.01, 'NOAA recent-rain evidence must override an older comparison-source timestamp');
 
 assert(edge.includes('MOISTURE_HISTORY_DAYS = 14'), 'Historical request must cover the prior two weeks');
-assert(edge.includes('dateUtc(Date.now() - MOISTURE_HISTORY_DAYS * 86400000)'), 'Historical request must use the persistent moisture-history window');
+assert(edge.includes("params.set('past_days', String(MOISTURE_HISTORY_DAYS))"), 'Combined weather request must use the persistent moisture-history window');
 assert(edge.includes('stormHistory: history'), 'Shared cache must publish persistent storm history');
 assert(edge.includes('peakRain1h'), 'One-hour intensity must be retained');
 assert(edge.includes('rainy.filter(point => point.index >= eventStartIndex)'), 'One-hour intensity must be limited to the current storm event');

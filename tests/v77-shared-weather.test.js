@@ -11,7 +11,7 @@ const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 
 assert.strictEqual(inline, source.trim(), 'Inline application script must match js/app.js');
 assert(html.includes('<option value="all" selected>All states</option>'), 'All-states view must be the default');
-assert(html.includes('<span>v80.0</span>'), 'Visible current version missing');
+assert(html.includes('<span>v80.1</span>'), 'Visible current version missing');
 
 assert(source.includes("supabaseRpc('get_latest_trail_weather',{p_trail_ids:null})"), 'Frontend must load the shared weather cache');
 const loadSection = source.slice(source.indexOf('async function load(focusTrail=null)'), source.indexOf('function locate('));

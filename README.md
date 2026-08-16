@@ -871,3 +871,14 @@ V80 intentionally defers:
 - Calibration of modeled grid-cell soil moisture against trail observations.
 - Automatic calibration from community reports; reports remain comparison evidence until enough trustworthy observations exist.
 - Automatic model calibration against a larger set of verified ride reports.
+
+# V80.1 — Exact rainfall reconciliation
+
+Baseline: the published V80.0 CRUST site.
+
+- Replaces the capped NOAA/Open-Meteo scaling with exact, non-overlapping 0–12, 12–24, 24–48, and 48–72-hour rainfall bands.
+- Uses NOAA MRMS for the amount of rain and Open-Meteo only to place that rain in time; missing hourly timing no longer discards authoritative rainfall.
+- Uses the same reconciled storm ledger for moisture, readiness, the card explanation, and the older-storm tile.
+- Requires surface moisture, subsurface saturation, and six forecast hours to be below rideable thresholds before reporting readiness; significant rain in the last 12 hours cannot display `Ready Now`.
+- Adds a Developer Mode rainfall-balance check so any future loss between the NOAA total and modeled total is visible.
+- Adds a permanent Mohican regression case plus mismatch tests from zero to ten times the timing-source rainfall.

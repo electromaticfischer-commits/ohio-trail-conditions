@@ -17,7 +17,7 @@ const MRMS_PRODUCTS: Record<number, string> = {
 const PERIODS = [12, 24, 48, 72];
 const VALID_STATES = new Set(['OH', 'WV', 'IN', 'PA', 'MI']);
 const NOAA_TRAIL_BATCH = 30;
-const OPEN_METEO_BATCH = 50;
+const OPEN_METEO_BATCH = 20;
 const SAMPLE_COUNT = 25;
 const ZERO_EPSILON = 0.005;
 const MONOTONIC_TOLERANCE = 0.03;
@@ -86,11 +86,14 @@ async function readJson(response: Response) {
   return data;
 }
 
-async function fetchTimed(input: string, init: RequestInit = {}, timeoutMs = 30000) {
+async function fetchTimed(input: string, init: RequestInit = {}, timeoutMs = 30000, label = 'External request') {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(input, {...init, signal: controller.signal});
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)} seconds`);
+    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -206,18 +209,22 @@ async function fetchProducts(): Promise<Record<number, Product>> {
     outFields: 'objectid,idp_subset,idp_validendtime',
     returnGeometry: 'false'
   });
-  const catalog = await readJson(await fetchTimed(`${MRMS_SERVICE}/query?${params}`, {}, 20000));
+  const catalog = await readJson(await fetchTimed(`${MRMS_SERVICE}/query?${params}`, {}, 20000, 'NOAA catalog'));
   const products: Record<number, Product> = {};
   for (const hours of PERIODS) {
     const matches = (catalog.features || [])
       .map((feature: {attributes?: Record<string, unknown>}) => feature.attributes || {})
-      .filter((attributes: Record<string, unknown>) => attributes.idp_subset === MRMS_PRODUCTS[hours]);
-    if (matches.length !== 1) throw new Error(`Expected one ${MRMS_PRODUCTS[hours]} raster`);
+      .filter((attributes: Record<string, unknown>) => attributes.idp_subset === MRMS_PRODUCTS[hours])
+      .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+        Number(b.idp_validendtime) - Number(a.idp_validendtime) || Number(b.objectid) - Number(a.objectid)
+      );
+    if (!matches.length) throw new Error(`Expected at least one ${MRMS_PRODUCTS[hours]} raster`);
+    const newest = matches[0];
     products[hours] = {
       hours,
-      objectId: Number(matches[0].objectid),
-      subset: String(matches[0].idp_subset),
-      validEndTime: Number(matches[0].idp_validendtime)
+      objectId: Number(newest.objectid),
+      subset: String(newest.idp_subset),
+      validEndTime: Number(newest.idp_validendtime)
     };
   }
   const times = Object.values(products).map(product => product.validEndTime);
@@ -251,7 +258,7 @@ async function fetchMrmsBatch(trails: Trail[], products: Record<number, Product>
       method: 'POST',
       headers: {'content-type': 'application/x-www-form-urlencoded'},
       body
-    }, 25000));
+    }, 25000, `NOAA ${hours}-hour samples`));
     const samples = Array.isArray(data.samples) ? data.samples : [];
     if (samples.length !== points.length) {
       throw new Error(`MRMS ${hours}h returned ${samples.length}/${points.length} samples`);
@@ -278,14 +285,8 @@ async function fetchMrmsBatch(trails: Trail[], products: Record<number, Product>
   return byTrail;
 }
 
-function dateUtc(milliseconds: number) {
-  return new Date(milliseconds).toISOString().slice(0, 10);
-}
-
-async function fetchOpenMeteo(trails: Trail[], historical = false) {
-  const endpoint = historical
-    ? 'https://historical-forecast-api.open-meteo.com/v1/forecast'
-    : 'https://api.open-meteo.com/v1/forecast';
+async function fetchOpenMeteo(trails: Trail[]) {
+  const endpoint = 'https://api.open-meteo.com/v1/forecast';
   const params = new URLSearchParams({
     latitude: trails.map(trail => trail.weather_lat).join(','),
     longitude: trails.map(trail => trail.weather_lon).join(','),
@@ -294,18 +295,16 @@ async function fetchOpenMeteo(trails: Trail[], historical = false) {
     timeformat: 'unixtime',
     timezone: 'GMT'
   });
-  if (historical) {
-    params.set('start_date', dateUtc(Date.now() - MOISTURE_HISTORY_DAYS * 86400000));
-    params.set('end_date', dateUtc(Date.now()));
-    params.set('temperature_unit', 'fahrenheit');
-    params.set('wind_speed_unit', 'mph');
-  } else {
-    params.set('past_hours', '18');
-    params.set('forecast_hours', '120');
-    params.set('temperature_unit', 'fahrenheit');
-    params.set('wind_speed_unit', 'mph');
-  }
-  const data = await readJson(await fetchTimed(`${endpoint}?${params}`, {}, 30000));
+  params.set('past_days', String(MOISTURE_HISTORY_DAYS));
+  params.set('forecast_days', '6');
+  params.set('temperature_unit', 'fahrenheit');
+  params.set('wind_speed_unit', 'mph');
+  const data = await readJson(await fetchTimed(
+    `${endpoint}?${params}`,
+    {},
+    60000,
+    'Open-Meteo combined history and forecast'
+  ));
   const rows = Array.isArray(data) ? data : [data];
   if (rows.length !== trails.length) {
     throw new Error(`Open-Meteo returned ${rows.length}/${trails.length} locations`);
@@ -316,16 +315,13 @@ async function fetchOpenMeteo(trails: Trail[], historical = false) {
 async function fetchOpenMeteoForState(trails: Trail[]) {
   const live = new Map<string, Record<string, unknown>>();
   const historical = new Map<string, Record<string, unknown>>();
-  for (const group of chunks(trails, OPEN_METEO_BATCH)) {
-    const [liveRows, historicalRows] = await Promise.all([
-      fetchOpenMeteo(group, false),
-      fetchOpenMeteo(group, true)
-    ]);
+  await Promise.all(chunks(trails, OPEN_METEO_BATCH).map(async group => {
+    const rows = await fetchOpenMeteo(group);
     group.forEach((trail, index) => {
-      live.set(trail.id, liveRows[index]);
-      historical.set(trail.id, historicalRows[index]);
+      live.set(trail.id, rows[index]);
+      historical.set(trail.id, rows[index]);
     });
-  }
+  }));
   return {live, historical};
 }
 
