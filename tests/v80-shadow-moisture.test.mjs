@@ -58,6 +58,11 @@ assert(source.includes('V80 is the active card rating'),'Developer diagnostics m
 assert(source.includes("moistureModel:shadow?'v80':'v79-fallback'"),'Fresh V80 snapshots must drive the public card with a transitional V79 fallback');
 assert(edge.includes('calculateShadowMoisture'),'Shared weather worker must calculate V80 centrally');
 assert(edge.includes("forecast_hours', '120'"),'Readiness must use a five-day forecast');
+assert(edge.includes('fetchTimed'),'External weather calls must have a bounded timeout');
+assert(edge.includes('savePreviousSnapshots'),'A short external outage must retain the last verified snapshot');
+assert(edge.includes('PREVIOUS_SNAPSHOT_HOLD_MS = 12'),'Delayed-weather fallback must remain time limited');
+assert(edge.includes('weatherLastVerifiedAt'),'Repeated fallback refreshes must not reset the verified-data age');
+assert(source.includes('Update delayed; showing the last verified weather.'),'Delayed weather must be disclosed on the card');
 assert(sql.includes('create table if not exists public.trail_storm_events'),'Persistent storm-event ledger missing');
 assert(sql.includes('create table if not exists public.trail_moisture_states'),'Persistent moisture state missing');
 

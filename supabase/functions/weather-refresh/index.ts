@@ -25,6 +25,7 @@ const MIN_STORM_TOTAL = 0.20;
 const MAX_SOURCE_RATIO = 3;
 const TRUSTED_HOLD_MS = 24 * 60 * 60 * 1000;
 const MOISTURE_HISTORY_DAYS = 14;
+const PREVIOUS_SNAPSHOT_HOLD_MS = 12 * 60 * 60 * 1000;
 
 type Trail = {
   id: string;
@@ -83,6 +84,16 @@ async function readJson(response: Response) {
     throw new Error(data?.error?.message || `HTTP ${response.status}`);
   }
   return data;
+}
+
+async function fetchTimed(input: string, init: RequestInit = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, {...init, signal: controller.signal});
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function rest(path: string, options: RequestInit = {}) {
@@ -195,7 +206,7 @@ async function fetchProducts(): Promise<Record<number, Product>> {
     outFields: 'objectid,idp_subset,idp_validendtime',
     returnGeometry: 'false'
   });
-  const catalog = await readJson(await fetch(`${MRMS_SERVICE}/query?${params}`));
+  const catalog = await readJson(await fetchTimed(`${MRMS_SERVICE}/query?${params}`, {}, 20000));
   const products: Record<number, Product> = {};
   for (const hours of PERIODS) {
     const matches = (catalog.features || [])
@@ -236,11 +247,11 @@ async function fetchMrmsBatch(trails: Trail[], products: Record<number, Product>
       })
     });
     const started = Date.now();
-    const data = await readJson(await fetch(`${MRMS_SERVICE}/getSamples`, {
+    const data = await readJson(await fetchTimed(`${MRMS_SERVICE}/getSamples`, {
       method: 'POST',
       headers: {'content-type': 'application/x-www-form-urlencoded'},
       body
-    }));
+    }, 25000));
     const samples = Array.isArray(data.samples) ? data.samples : [];
     if (samples.length !== points.length) {
       throw new Error(`MRMS ${hours}h returned ${samples.length}/${points.length} samples`);
@@ -294,7 +305,7 @@ async function fetchOpenMeteo(trails: Trail[], historical = false) {
     params.set('temperature_unit', 'fahrenheit');
     params.set('wind_speed_unit', 'mph');
   }
-  const data = await readJson(await fetch(`${endpoint}?${params}`));
+  const data = await readJson(await fetchTimed(`${endpoint}?${params}`, {}, 30000));
   const rows = Array.isArray(data) ? data : [data];
   if (rows.length !== trails.length) {
     throw new Error(`Open-Meteo returned ${rows.length}/${trails.length} locations`);
@@ -812,6 +823,56 @@ async function saveSnapshots(state: string, trails: Trail[], openMeteo: Awaited<
   return rows;
 }
 
+async function savePreviousSnapshots(state: string, trails: Trail[], reason: string) {
+  const observedAt = new Date().toISOString();
+  const required = ['rain12', 'rain24', 'rain48', 'rain72', 'humidity', 'wind', 'cloud', 'tempMin', 'temperature'];
+  const rows = trails.flatMap(trail => {
+    const previous = trail.previous_result;
+    const verifiedAt = previous?.weatherLastVerifiedAt ||
+      (previous?.weatherRefreshDelayed ? previous?.sourceTimestamp : null) ||
+      trail.previous_observed_at;
+    const verifiedTime = new Date(String(verifiedAt || 0)).getTime();
+    const usable = previous && Number.isFinite(verifiedTime) &&
+      Date.now() - verifiedTime <= PREVIOUS_SNAPSHOT_HOLD_MS &&
+      required.every(key => Number.isFinite(Number(previous[key])));
+    if (!usable || !previous) return [];
+    const result = {
+      ...previous,
+      observedAt,
+      rainSource: 'Last verified weather snapshot',
+      rainWarning: `Weather refresh delayed. Using the last verified values from ${verifiedAt}.`,
+      weatherRefreshDelayed: true,
+      weatherLastVerifiedAt: verifiedAt,
+      weatherRefreshError: reason
+    };
+    return [{
+      trail_id: trail.id,
+      observed_at: observedAt,
+      rain_12: result.rain12,
+      rain_24: result.rain24,
+      rain_48: result.rain48,
+      rain_72: result.rain72,
+      temperature_f: result.temperature,
+      humidity_percent: result.humidity,
+      wind_mph: result.wind,
+      source_name: result.rainSource,
+      source_timestamp: result.sourceTimestamp || null,
+      data_quality: trail.previous_quality === 'unavailable' ? 'unavailable' : 'fallback',
+      result,
+      diagnostics: {state, schemaVersion: 1, fallbackSnapshot: true, reason}
+    }];
+  });
+  for (const group of chunks(rows, 100)) {
+    const response = await rest('trail_weather_snapshots', {
+      method: 'POST',
+      headers: {'prefer': 'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify(group)
+    });
+    if (!response.ok) throw new Error(`Fallback snapshot insert failed: ${await response.text()}`);
+  }
+  return rows;
+}
+
 export default {
   async fetch(request: Request) {
     if (request.method !== 'POST') return jsonResponse({error: 'POST required'}, 405);
@@ -819,9 +880,10 @@ export default {
     const token = request.headers.get('x-weather-refresh-token') || '';
     if (!token || !(await verifyToken(token))) return jsonResponse({error: 'Unauthorized'}, 401);
 
+    let state = '';
     try {
       const body = await request.json();
-      const state = String(body?.state || '').toUpperCase();
+      state = String(body?.state || '').toUpperCase();
       if (!VALID_STATES.has(state)) return jsonResponse({error: 'Unsupported state'}, 400);
       const started = Date.now();
       const trails = await loadTrails(state);
@@ -845,7 +907,23 @@ export default {
       });
     } catch (error) {
       console.error(error);
-      return jsonResponse({error: String(error instanceof Error ? error.message : error)}, 500);
+      const reason = String(error instanceof Error ? error.message : error);
+      try {
+        if (VALID_STATES.has(state)) {
+          const trails = await loadTrails(state);
+          const fallbackRows = await savePreviousSnapshots(state, trails, reason);
+          if (fallbackRows.length) return jsonResponse({
+            state,
+            refreshed: fallbackRows.length,
+            quality: {fallback: fallbackRows.length},
+            delayed: true,
+            reason
+          });
+        }
+      } catch (fallbackError) {
+        console.error(fallbackError);
+      }
+      return jsonResponse({error: reason}, 500);
     }
   }
 };

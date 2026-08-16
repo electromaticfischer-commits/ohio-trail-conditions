@@ -886,7 +886,8 @@ async function fetchTrail(t){
 function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]))}
 function weatherSummary(r){
   if(r.weatherError)return 'Weather unavailable.';
-  return `Temperature ${Math.round(r.temperature)}°F, humidity ${Math.round(r.humidity)}%, wind ${Math.round(r.wind)} mph.`;
+  const summary=`Temperature ${Math.round(r.temperature)}°F, humidity ${Math.round(r.humidity)}%, wind ${Math.round(r.wind)} mph.`;
+  return r.weatherRefreshDelayed?`${summary} Update delayed; showing the last verified weather.`:summary;
 }
 function olderRainAmount(r){
   const rain168=Number(r.rain168),rain72=Number(r.rain72);
@@ -1259,7 +1260,7 @@ function trailFromCachedWeather(t,row){
     rain72Min:Number(weather.rain72Min??r72),rain72Max:Number(weather.rain72Max??r72),
     rainSampleRadius:Number(weather.rainSampleRadius)||0,rainSampleCount:Number(weather.rainSampleCount)||1,
     rainSource:weather.rainSource||'Unavailable',rainWarning:weather.rainWarning||'',
-    rainDiagnostics:weather.rainDiagnostics||{},rainDataUncertain:Boolean(weather.rainDataUncertain),
+    rainDiagnostics:weather.rainDiagnostics||{},rainDataUncertain:Boolean(weather.rainDataUncertain),weatherRefreshDelayed:Boolean(weather.weatherRefreshDelayed),
     humidity:hum,wind,temperature:currentTemperature,tempMin:temp,score:model.score,
     lastRainAt:weather.lastRainAt||null,rain168:Number(weather.rain168)||0,maxRain1h:Number(weather.maxRain1h)||0,stormHistory:weather.stormHistory||null,priorStormHistory:weather.priorStormHistory||null,stormRecovery:model.stormRecovery,shadowModel:shadow,moistureModel:shadow?'v80':'v79-fallback',legacyRideability:model.rideability,
     soilProfile,effectiveDrying,engineeredDryingFactor,
