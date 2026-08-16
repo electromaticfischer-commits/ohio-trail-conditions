@@ -119,7 +119,7 @@ Baseline: V77.0.
 Baseline: V76.1.
 
 - NOAA MRMS and Open-Meteo weather are refreshed centrally in Supabase every
-  hour, in five staggered state jobs.
+  hour, in six staggered state jobs.
 - The browser loads one shared weather snapshot instead of making separate
   weather requests for every trail.
 - The rainfall, soil, rideability, and readiness formulas remain in the
@@ -128,7 +128,7 @@ Baseline: V76.1.
   shown. There is no result cap.
 - Moving or zooming the map automatically adds trails in the visible area.
   Trails already loaded stay available and are not duplicated.
-- All five states are the default view; the state menu remains available as a
+- All six states are the default view; the state menu remains available as a
   filter.
 - Fifteen verified trails present in the packaged V76.1 catalog were synced
   into the shared catalog before the cache was refreshed.
@@ -882,3 +882,14 @@ Baseline: the published V80.0 CRUST site.
 - Requires surface moisture, subsurface saturation, and six forecast hours to be below rideable thresholds before reporting readiness; significant rain in the last 12 hours cannot display `Ready Now`.
 - Adds a Developer Mode rainfall-balance check so any future loss between the NOAA total and modeled total is visible.
 - Adds a permanent Mohican regression case plus mismatch tests from zero to ten times the timing-source rainfall.
+
+# V81.0 — Kentucky expansion
+
+Baseline: the published V80.1 CRUST site.
+
+- Adds 36 verified Kentucky mountain-bike riding systems as network-level cards rather than individual trail segments.
+- Adds Kentucky to the state filter, shared-catalog boundary, and hourly shared-weather refresh.
+- Uses current Kentucky mountain-bike organizations, land managers, state parks, NPS, and MTB Project riding areas as linked references.
+- Adds 17-point USDA soil research at every Kentucky weather center; low-confidence results remain visible and adjustable in Developer Mode.
+- Expands the packaged catalog from 299 to 335 systems across six states.
+- Does not change rainfall, rideability, readiness, community reports, or visual design.

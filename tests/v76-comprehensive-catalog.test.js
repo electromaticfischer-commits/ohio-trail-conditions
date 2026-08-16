@@ -15,13 +15,13 @@ const additions = Object.values(audit.states)
   .filter(entry => entry.decision === 'add')
   .map(entry => entry.proposed);
 
-assert.strictEqual(trails.length, 299, 'V76.1 must contain 299 riding systems');
+assert.strictEqual(trails.length, 335, 'Current catalog must contain 335 riding systems');
 assert.deepStrictEqual(
-  Object.fromEntries(['OH','WV','IN','PA','MI'].map(code => [
+  Object.fromEntries(['OH','WV','IN','PA','MI','KY'].map(code => [
     code,
     trails.filter(trail => (trail.stateCode || 'OH') === code).length
   ])),
-  {OH:49,WV:34,IN:40,PA:91,MI:85}
+  {OH:49,WV:34,IN:40,PA:91,MI:85,KY:36}
 );
 assert.strictEqual(additions.length, 149, 'V76 audit must approve 149 additions');
 assert.strictEqual(new Set(trails.map(trail => trail.id)).size, trails.length, 'Trail IDs must remain unique');
@@ -29,7 +29,7 @@ assert(additions.every(addition => trails.some(trail => trail.id === addition.id
 assert(additions.every(addition => profiles[addition.id]), 'Approved addition missing a soil profile');
 assert(additions.every(addition => addition.routeSource?.name === 'MTB Project riding area'), 'MTB-specific source metadata missing');
 assert(additions.every(addition => Number.isFinite(addition.lat) && Number.isFinite(addition.lon)), 'Riding-area center missing');
-assert(html.includes('<span>v80.1</span>'), 'Visible current version missing');
+assert(html.includes('<span>v81.0</span>'), 'Visible current version missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert.strictEqual((sql.match(/insert into public\.trail_systems/g) || []).length, 149, 'Supabase trail upsert count is incorrect');
 assert.strictEqual((sql.match(/insert into public\.trail_soil_profiles/g) || []).length, 149, 'Supabase soil upsert count is incorrect');

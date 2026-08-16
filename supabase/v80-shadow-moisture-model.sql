@@ -167,7 +167,8 @@ begin
       ('WV', 'weather-refresh-wv'),
       ('IN', 'weather-refresh-in'),
       ('PA', 'weather-refresh-pa'),
-      ('MI', 'weather-refresh-mi')
+      ('MI', 'weather-refresh-mi'),
+      ('KY', 'weather-refresh-ky')
     ) as jobs(state_code, job_name)
   loop
     select jobid into v_job_id from cron.job where jobname = item.job_name;

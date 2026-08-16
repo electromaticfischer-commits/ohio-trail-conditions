@@ -15,7 +15,7 @@ const MRMS_PRODUCTS: Record<number, string> = {
   72: 'conus_QPE_72H'
 };
 const PERIODS = [12, 24, 48, 72];
-const VALID_STATES = new Set(['OH', 'WV', 'IN', 'PA', 'MI']);
+const VALID_STATES = new Set(['OH', 'WV', 'IN', 'PA', 'MI', 'KY']);
 const NOAA_TRAIL_BATCH = 30;
 const OPEN_METEO_BATCH = 20;
 const SAMPLE_COUNT = 25;
