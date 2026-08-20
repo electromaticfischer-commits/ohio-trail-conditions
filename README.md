@@ -920,7 +920,7 @@ Baseline: the published V81.2 CRUST site.
 - Accounts for repeated rainfall within 72 hours, trail-specific drainage, canopy and sensitivity, plus the next 24 hours of forecast drying weather.
 - Continues to require six consecutive forecast hours below every rideable moisture threshold.
 - Makes the card explanation identify the storm contributing the most moisture now instead of simply selecting the largest storm in 14 days.
-- Does not change NOAA rainfall retrieval, rainfall totals, rideability scores, trail data, maps, or community reports.
+- Does not change NOAA rainfall retrieval, rainfall totals, raw moisture calculations, trail data, maps, or community reports. While a recovery hold is active, the public rating is capped at 76% `Use caution` so it cannot contradict the readiness time.
 
 V82.0 verification:
 
