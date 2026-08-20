@@ -171,7 +171,7 @@ function eventInitialLoads(event, hydrology) {
 function modelStatus(wetness) {
   if (wetness < 24) return {key: 'green', label: 'Likely good'};
   if (wetness < 43) return {key: 'yellow', label: 'Use caution'};
-  if (wetness < 63) return {key: 'orange', label: 'Marginal'};
+  if (wetness < 63) return {key: 'orange', label: 'Wait'};
   return {key: 'red', label: 'Likely wet'};
 }
 

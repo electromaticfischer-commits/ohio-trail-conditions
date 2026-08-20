@@ -893,3 +893,12 @@ Baseline: the published V80.1 CRUST site.
 - Adds 17-point USDA soil research at every Kentucky weather center; low-confidence results remain visible and adjustable in Developer Mode.
 - Expands the packaged catalog from 299 to 335 systems across six states.
 - Does not change rainfall, rideability, readiness, community reports, or visual design.
+
+# V81.1 — Condition-label consistency
+
+Baseline: the published V81.0 CRUST site.
+
+- Changes the orange condition label from `Marginal` to the clearer `Wait`.
+- Starts the green progress-bar color at 77%, matching the `Likely good` flag exactly; 76% remains yellow `Use caution`.
+- Normalizes previously cached orange weather snapshots to display `Wait` immediately.
+- Does not change rainfall, rideability, readiness, soil, storm-event, or community-report calculations.

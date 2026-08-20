@@ -369,7 +369,7 @@ function readyFactHtml(ready){
   if(ready==='Check official status')return '<div class="ready-tile"><span>Ready</span><b>Check official</b></div>';
   return `<div class="ready-tile"><span>Ready</span><b>${ready}</b></div>`;
 }
-function statusFrom(score,temp){if(temp<34&&score>32)return{key:'blue',label:'Freeze-thaw risk'};if(score<24)return{key:'green',label:'Likely good'};if(score<43)return{key:'yellow',label:'Use caution'};if(score<63)return{key:'orange',label:'Marginal'};return{key:'red',label:'Likely wet'}}
+function statusFrom(score,temp){if(temp<34&&score>32)return{key:'blue',label:'Freeze-thaw risk'};if(score<24)return{key:'green',label:'Likely good'};if(score<43)return{key:'yellow',label:'Use caution'};if(score<63)return{key:'orange',label:'Wait'};return{key:'red',label:'Likely wet'}}
 function readyHours(score,d){return score<43?0:Math.max(4,Math.round((score-39)/(2.4*d)))}
 function readyLabel(hours){const h=Math.max(0,Math.ceil(Number(hours)||0));return h<1?'Now':h<24?`~${h} hr`:`~${Math.ceil(h/24)} day${Math.ceil(h/24)>1?'s':''}`}
 function readyEstimate(score,d){return readyLabel(readyHours(score,d))}
@@ -419,7 +419,7 @@ function conservativeRainEnd(rainfall,lastRainAt){
   else if(r72-r48>=.005)rainMs=Math.max(rainMs,now-72*3600000);
   return rainMs?new Date(rainMs).toISOString():null;
 }
-function rideColor(r){if(r>=76)return'#237a43';if(r>=58)return'#ffd400';if(r>=38)return'#ef7b22';return'#c53131'}
+function rideColor(r){if(r>=77)return'#237a43';if(r>=58)return'#ffd400';if(r>=38)return'#ef7b22';return'#c53131'}
 function formatInches(value){
   const n=Number(value);
   if(!Number.isFinite(n)||n<0)return 'Unavailable';
@@ -1270,7 +1270,9 @@ function trailFromCachedWeather(t,row){
     ?weather.shadowModel
     :null;
   const activeRideability=shadow?Math.round(Number(shadow.rideability)):model.rideability;
-  const activeStatus=shadow&&shadow.status?.key&&shadow.status?.label?shadow.status:model.status;
+  const activeStatus=shadow&&shadow.status?.key&&shadow.status?.label
+    ?{...shadow.status,label:shadow.status.key==='orange'?'Wait':shadow.status.label}
+    :model.status;
   const activeReady=shadow?shadowReadyEstimate(shadow.readyAt):model.ready;
   return {
     ...t,

@@ -18,7 +18,7 @@
 <div class="toolbar">
 <input id="search" placeholder="Search trails or regions…" aria-label="Search trails">
 <select id="stateFilter" aria-label="Choose a state"><option value="all" selected>All states</option><option value="OH">Ohio</option><option value="WV">West Virginia</option><option value="IN">Indiana</option><option value="PA">Pennsylvania</option><option value="MI">Michigan</option><option value="KY">Kentucky</option></select>
-<select id="statusFilter"><option value="all">All conditions</option><option value="green">Likely good</option><option value="yellow">Use caution</option><option value="orange">Marginal</option><option value="red">Likely wet</option><option value="blue">Freeze-thaw risk</option></select>
+<select id="statusFilter"><option value="all">All conditions</option><option value="green">Likely good</option><option value="yellow">Use caution</option><option value="orange">Wait</option><option value="red">Likely wet</option><option value="blue">Freeze-thaw risk</option></select>
 <select id="sort"><option value="distance">Nearest first</option><option value="rideability">Best rideability</option><option value="recent-report">Recently reported</option><option value="name">Trail name</option></select>
 <button id="locate" class="location-control" type="button">Find trails near me</button>
 <button id="manage" type="button" hidden>Manage trails</button>
@@ -26,7 +26,7 @@
 </div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading nearby trails…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v81.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v81.1</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="adminLoginDialog" class="login-dialog">
 <div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
@@ -466,7 +466,7 @@ function readyFactHtml(ready){
   if(ready==='Check official status')return '<div class="ready-tile"><span>Ready</span><b>Check official</b></div>';
   return `<div class="ready-tile"><span>Ready</span><b>${ready}</b></div>`;
 }
-function statusFrom(score,temp){if(temp<34&&score>32)return{key:'blue',label:'Freeze-thaw risk'};if(score<24)return{key:'green',label:'Likely good'};if(score<43)return{key:'yellow',label:'Use caution'};if(score<63)return{key:'orange',label:'Marginal'};return{key:'red',label:'Likely wet'}}
+function statusFrom(score,temp){if(temp<34&&score>32)return{key:'blue',label:'Freeze-thaw risk'};if(score<24)return{key:'green',label:'Likely good'};if(score<43)return{key:'yellow',label:'Use caution'};if(score<63)return{key:'orange',label:'Wait'};return{key:'red',label:'Likely wet'}}
 function readyHours(score,d){return score<43?0:Math.max(4,Math.round((score-39)/(2.4*d)))}
 function readyLabel(hours){const h=Math.max(0,Math.ceil(Number(hours)||0));return h<1?'Now':h<24?`~${h} hr`:`~${Math.ceil(h/24)} day${Math.ceil(h/24)>1?'s':''}`}
 function readyEstimate(score,d){return readyLabel(readyHours(score,d))}
@@ -516,7 +516,7 @@ function conservativeRainEnd(rainfall,lastRainAt){
   else if(r72-r48>=.005)rainMs=Math.max(rainMs,now-72*3600000);
   return rainMs?new Date(rainMs).toISOString():null;
 }
-function rideColor(r){if(r>=76)return'#237a43';if(r>=58)return'#ffd400';if(r>=38)return'#ef7b22';return'#c53131'}
+function rideColor(r){if(r>=77)return'#237a43';if(r>=58)return'#ffd400';if(r>=38)return'#ef7b22';return'#c53131'}
 function formatInches(value){
   const n=Number(value);
   if(!Number.isFinite(n)||n<0)return 'Unavailable';
@@ -1367,7 +1367,9 @@ function trailFromCachedWeather(t,row){
     ?weather.shadowModel
     :null;
   const activeRideability=shadow?Math.round(Number(shadow.rideability)):model.rideability;
-  const activeStatus=shadow&&shadow.status?.key&&shadow.status?.label?shadow.status:model.status;
+  const activeStatus=shadow&&shadow.status?.key&&shadow.status?.label
+    ?{...shadow.status,label:shadow.status.key==='orange'?'Wait':shadow.status.label}
+    :model.status;
   const activeReady=shadow?shadowReadyEstimate(shadow.readyAt):model.ready;
   return {
     ...t,
