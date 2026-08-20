@@ -21,9 +21,9 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(context.statusFrom(63,60))),{ke
 assert.strictEqual(context.rideColor(76),'#ffd400','76% must remain caution yellow');
 assert.strictEqual(context.rideColor(77),'#237a43','77% must begin likely-good green');
 assert(html.includes('<option value="orange">Wait</option>'),'Wait filter label missing');
-assert(html.includes('<span>v81.1</span>'),'Visible V81.1 version missing');
+assert(html.includes('<span>v81.2</span>'),'Visible V81.2 version missing');
 assert(model.includes("return {key: 'orange', label: 'Wait'}"),'Shared model still emits the old orange label');
 assert(source.includes("shadow.status.key==='orange'?'Wait':shadow.status.label"),'Cached orange status is not normalized');
 assert.strictEqual(inline,source.trim(),'Inline application script does not match js/app.js');
 
-console.log('V81.1 status-label tests passed.');
+console.log('V81.2 status-label tests passed.');

@@ -902,3 +902,11 @@ Baseline: the published V81.0 CRUST site.
 - Starts the green progress-bar color at 77%, matching the `Likely good` flag exactly; 76% remains yellow `Use caution`.
 - Normalizes previously cached orange weather snapshots to display `Wait` immediately.
 - Does not change rainfall, rideability, readiness, soil, storm-event, or community-report calculations.
+
+# V81.2 — Updated CRUST logo
+
+Baseline: the published V81.1 CRUST site.
+
+- Replaces the header artwork with the supplied CRUST logo and “Chasing perfect dirt” tagline.
+- Keeps the header compact at desktop and phone widths despite the new artwork's taller proportions.
+- Does not change rainfall, weather, rideability, readiness, trail data, maps, or community reports.

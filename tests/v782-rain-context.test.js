@@ -9,7 +9,7 @@ const css=fs.readFileSync(path.join(root,'css','styles.css'),'utf8');
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 const inline=html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 assert.strictEqual(inline,source.trim(),'Inline application script must match js/app.js');
-assert(html.includes('<span>v81.1</span>'),'Visible V81.1 version missing');
+assert(html.includes('<span>v81.2</span>'),'Visible V81.2 version missing');
 
 const context={
   formatInches:value=>`${Number(value||0).toFixed(2)}"`,
