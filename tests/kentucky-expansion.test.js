@@ -28,7 +28,7 @@ assert.strictEqual(kentucky.filter(trail => /Cherokee|Seneca/.test(trail.name)).
 assert(kentucky.some(trail => trail.id === 'ky-rudy-mine-ben-hawes'), 'Rudy Mine / Ben Hawes system missing');
 
 assert(html.includes('<option value="KY">Kentucky</option>'), 'Kentucky state filter missing');
-assert(html.includes('<span>v81.2</span>'), 'Visible V81 version missing');
+assert(html.includes('<span>v82.0</span>'), 'Visible V81 version missing');
 assert(source.includes('p_south:36.3'), 'Kentucky catalog boundary missing');
 assert(worker.includes("'MI', 'KY'"), 'Kentucky weather worker support missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');

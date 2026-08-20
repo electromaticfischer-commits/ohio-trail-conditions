@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="css/styles.css?v=80-shadow">
 </head>
 <body>
-<header><div class="header-inner"><div class="brand-lockup"><h1><img class="brand-logo" src="assets/crust-logo.png?v=81.2" alt="CRUST — Chasing perfect dirt."></h1></div><div class="header-updated">Conditions refreshed <span id="updated">–</span></div></div></header>
+<header><div class="header-inner"><div class="brand-lockup"><h1><img class="brand-logo" src="assets/crust-logo.png?v=82.0" alt="CRUST — Chasing perfect dirt."></h1></div><div class="header-updated">Conditions refreshed <span id="updated">–</span></div></div></header>
 <main>
 <div id="pickBanner" class="pick-banner" aria-live="polite">
   <div><strong id="pickBannerTitle">Choose a location</strong><span>Click anywhere on the map. Press Esc or Cancel to stop.</span></div>
@@ -26,7 +26,7 @@
 </div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading nearby trails…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v81.2</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v82.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="adminLoginDialog" class="login-dialog">
 <div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
@@ -1039,7 +1039,7 @@ function modelAssessment(r){
   if(r.moistureModel==='v80'&&r.shadowModel){
     const shadow=r.shadowModel;
     const surface=Number(shadow.surfaceMoisture)||0,subsurface=Number(shadow.subsurfaceSaturation)||0;
-    const biggest=shadow.cardStorm||shadow.biggestStorm||{};
+    const biggest=shadow.dominantStorm||shadow.cardStorm||shadow.biggestStorm||{};
     const endedAt=new Date(biggest.endedAt||0).getTime();
     const ageHours=Number.isFinite(endedAt)&&endedAt>0?Math.max(0,(Date.now()-endedAt)/3600000):null;
     const storm=Number(biggest.totalRain)>=.5

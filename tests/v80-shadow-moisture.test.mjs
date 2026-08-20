@@ -80,6 +80,37 @@ const traceBand=calculateShadowMoisture({trail:mohican,historicalHourly:hourlyWi
 assert.equal(traceBand.rainBalance.balanced,true,'Trace-sized NOAA bands must remain in exact rainfall balance');
 assert.equal(traceBand.rainBalance.allocated72,1.2039,'A sub-threshold band must not disappear from the moisture ledger');
 
+const baileys={sensitivity:.9,canopy:.82,effectiveDrying:1.25,soilProfile:{dominantSoil:'Silt Loam',secondarySoil:'Loam',soilDryingFactor:1.25,confidence:'High'}};
+const baileysHourly=hourlyWith([
+  ...spreadStorm(1.008,-66,4),
+  ...spreadStorm(.3465,-3,4)
+],{humidity:93,wind:3,solar:40,evap:.001,vpd:.15});
+const baileysModel=calculateShadowMoisture({
+  trail:baileys,
+  historicalHourly:baileysHourly,
+  forecastHourly:baileysHourly,
+  authoritativeRainfall:{r12:.3465,r24:.3465,r48:.3465,r72:1.3545},
+  rainQuality:'trusted',
+  now
+});
+const baileysReadyHours=(new Date(baileysModel.readyAt).getTime()-now)/3600000;
+assert.equal(baileysModel.recoveryGate.baseHours,24,'Repeated rain above one inch in 72 hours must begin with a 24-hour recovery guideline');
+assert(baileysReadyHours>=12,'A Bailey-like wet, humid event must not forecast readiness in only one hour');
+assert.equal(baileysModel.dominantStorm.totalRain,.3465,'The explanation must favor the storm contributing the most moisture now, not merely the largest old storm');
+
+const favorableHalfInch=calculateShadowMoisture({
+  trail:{sensitivity:.8,canopy:.2,effectiveDrying:1.3,soilProfile:{dominantSoil:'Sand',soilDryingFactor:1.3,confidence:'High'}},
+  historicalHourly:hourlyWith(spreadStorm(.5,-1,2),{humidity:45,wind:12,solar:850,evap:.012,vpd:1.8}),
+  forecastHourly:hourlyWith([],{humidity:45,wind:12,solar:850,evap:.012,vpd:1.8}),
+  authoritativeRainfall:{r12:.5,r24:.5,r48:.5,r72:.5},
+  rainQuality:'trusted',
+  now
+});
+assert.equal(favorableHalfInch.recoveryGate.baseHours,24,'A half-inch event must use the global 24-hour starting guideline');
+assert(favorableHalfInch.recoveryGate.adjustedHours>=18,'Even unusually favorable drying must retain a meaningful recovery floor');
+assert.notEqual(favorableHalfInch.status.key,'green','An active rainfall recovery hold must not display a green condition');
+assert(favorableHalfInch.rideability<=76,'An active rainfall recovery hold must cap the public score at caution');
+
 const source=fs.readFileSync(path.join(root,'js','app.js'),'utf8');
 const edge=fs.readFileSync(path.join(root,'supabase','functions','weather-refresh','index.ts'),'utf8');
 const sql=fs.readFileSync(path.join(root,'supabase','v80-shadow-moisture-model.sql'),'utf8');
@@ -108,5 +139,6 @@ console.log(JSON.stringify({
   chestnut:{rideability:chestnutModel.rideability,surface:chestnutModel.surfaceMoisture,subsurface:chestnutModel.subsurfaceSaturation},
   greatSeal:{rideability:sealModel.rideability,surface:sealModel.surfaceMoisture,subsurface:sealModel.subsurfaceSaturation},
   mohican:{rideability:mohicanModel.rideability,status:mohicanModel.status.label,readyAt:mohicanModel.readyAt,rainBalance:mohicanModel.rainBalance}
+  ,baileys:{rideability:baileysModel.rideability,readyAt:baileysModel.readyAt,recoveryGate:baileysModel.recoveryGate}
 },null,2));
 console.log('V80 shadow-moisture tests passed.');

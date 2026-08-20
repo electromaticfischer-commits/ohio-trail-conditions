@@ -1,4 +1,4 @@
-export const MOISTURE_MODEL_VERSION = 'v80-active-2';
+export const MOISTURE_MODEL_VERSION = 'v82-active-1';
 
 const HOUR_MS = 3600000;
 const RAIN_THRESHOLD = 0.005;
@@ -180,7 +180,55 @@ function isRideableMoisture(surface, subsurface) {
   return wetness < 43 && surface < 38 && subsurface < 45;
 }
 
-function forecastReadiness(surface, subsurface, hydrology, forecastHourly, now) {
+function averageForecastDrying(forecastHourly, now, hours = 24) {
+  const times = forecastHourly?.time || [];
+  const factors = [];
+  times.forEach((value, index) => {
+    const timestamp = timeMs(value);
+    if (timestamp > now && timestamp <= now + hours * HOUR_MS) factors.push(hourlyDryingFactor(forecastHourly, index));
+  });
+  return factors.length ? factors.reduce((sum, value) => sum + value, 0) / factors.length : .85;
+}
+
+function rainfallRecoveryGate(events, hydrology, forecastHourly, recentRain72, now) {
+  const recent = events.filter(event => {
+    const endedAt = timeMs(event.endedAt);
+    return endedAt <= now && now - endedAt <= 72 * HOUR_MS;
+  }).sort((a, b) => timeMs(a.endedAt) - timeMs(b.endedAt));
+  const latest = recent.at(-1) || null;
+  const latestTotal = Math.max(0, Number(latest?.totalRain) || 0);
+  const total72 = Math.max(latestTotal, Number(recentRain72) || 0);
+  if (!latest || latestTotal < .1) return {active: false, readyAt: null, baseHours: 0, adjustedHours: 0, latestEvent: latest};
+
+  let baseHours = latestTotal >= 3 ? 60
+    : latestTotal >= 2 ? 48
+    : latestTotal >= 1 ? 36
+    : latestTotal >= .5 ? 24
+    : latestTotal >= .25 ? 12
+    : 6;
+  // Repeated storms keep the recovery clock meaningful even when the newest
+  // shower is smaller than the rain that established the saturated baseline.
+  if (total72 >= 3) baseHours = Math.max(baseHours, 48);
+  else if (total72 >= 2) baseHours = Math.max(baseHours, 36);
+  else if (total72 >= 1) baseHours = Math.max(baseHours, 24);
+
+  const forecastDrying = averageForecastDrying(forecastHourly, now);
+  const weatherMultiplier = clamp(.8, 1.35, .85 / forecastDrying);
+  const trailMultiplier = clamp(.8, 1.3, hydrology.vulnerability);
+  const adjustedHours = clamp(baseHours * .75, baseHours * 1.5, baseHours * weatherMultiplier * trailMultiplier);
+  const readyAtMs = timeMs(latest.endedAt) + adjustedHours * HOUR_MS;
+  return {
+    active: readyAtMs > now,
+    readyAt: new Date(readyAtMs).toISOString(),
+    baseHours,
+    adjustedHours: Number(adjustedHours.toFixed(1)),
+    latestEvent: latest,
+    recentRain72: Number(total72.toFixed(4)),
+    forecastDrying: Number(forecastDrying.toFixed(3))
+  };
+}
+
+function forecastReadiness(surface, subsurface, hydrology, forecastHourly, now, earliestReadyAt = now) {
   const times = forecastHourly?.time || [];
   let safeHours = 0;
   for (let index = 0; index < times.length; index++) {
@@ -195,7 +243,7 @@ function forecastReadiness(surface, subsurface, hydrology, forecastHourly, now) 
       surface = combineLoads([surface, impulse.surface]);
       subsurface = combineLoads([subsurface, impulse.subsurface]);
     }
-    safeHours = isRideableMoisture(surface, subsurface) ? safeHours + 1 : 0;
+    safeHours = timestamp >= earliestReadyAt && isRideableMoisture(surface, subsurface) ? safeHours + 1 : 0;
     if (safeHours >= 6) return new Date(timestamp - 5 * HOUR_MS).toISOString();
   }
   return null;
@@ -207,22 +255,42 @@ export function calculateShadowMoisture({trail = {}, historicalHourly = {}, fore
   const events = reconciliation.events;
   const surfaceLoads = [];
   const subsurfaceLoads = [];
+  let dominantStorm = null;
+  let dominantContribution = -1;
   events.forEach(event => {
     const endedAt = new Date(event.endedAt).getTime();
     const dryingHours = effectiveDryingHours(historicalHourly, endedAt, now);
     const initial = eventInitialLoads(event, hydrology);
-    surfaceLoads.push(initial.surface * Math.pow(.5, dryingHours / hydrology.surfaceHalfLifeHours));
-    subsurfaceLoads.push(initial.subsurface * Math.pow(.5, dryingHours / hydrology.subsurfaceHalfLifeHours));
+    const surface = initial.surface * Math.pow(.5, dryingHours / hydrology.surfaceHalfLifeHours);
+    const subsurface = initial.subsurface * Math.pow(.5, dryingHours / hydrology.subsurfaceHalfLifeHours);
+    surfaceLoads.push(surface);
+    subsurfaceLoads.push(subsurface);
+    const contribution = combineLoads([surface, subsurface * .78]);
+    if (contribution > dominantContribution) {
+      dominantContribution = contribution;
+      dominantStorm = {...event, currentContribution: Number(contribution.toFixed(1))};
+    }
   });
   const surfaceMoisture = combineLoads(surfaceLoads);
   const subsurfaceSaturation = combineLoads(subsurfaceLoads);
-  const wetnessScore = Math.round(combineLoads([surfaceMoisture, subsurfaceSaturation * .78]));
+  const recoveryGate = rainfallRecoveryGate(
+    events,
+    hydrology,
+    forecastHourly,
+    reconciliation.rainBalance?.target72 ?? authoritativeRainfall?.r72,
+    now
+  );
+  const moistureWetnessScore = Math.round(combineLoads([surfaceMoisture, subsurfaceSaturation * .78]));
+  // A trail cannot be presented as green while a meaningful rainfall
+  // recovery hold is still active, even when its calculated surface has
+  // already crossed the raw moisture threshold.
+  const wetnessScore = recoveryGate.active ? Math.max(24, moistureWetnessScore) : moistureWetnessScore;
   const rideability = 100 - wetnessScore;
   const status = modelStatus(wetnessScore);
-  const recentRain12 = Math.max(0, Number(authoritativeRainfall?.r12) || 0);
-  const readyNow = isRideableMoisture(surfaceMoisture, subsurfaceSaturation) && recentRain12 < .25;
+  const earliestReadyAt = recoveryGate.readyAt ? timeMs(recoveryGate.readyAt) : now;
+  const readyNow = isRideableMoisture(surfaceMoisture, subsurfaceSaturation) && now >= earliestReadyAt;
   const readyAt = readyNow ? new Date(now).toISOString() : forecastReadiness(
-    surfaceMoisture, subsurfaceSaturation, hydrology, forecastHourly, now
+    surfaceMoisture, subsurfaceSaturation, hydrology, forecastHourly, now, earliestReadyAt
   );
   const biggestStorm = events.slice().sort((a, b) => b.totalRain - a.totalRain)[0] || null;
   const cardStorm = events.filter(event => {
@@ -238,6 +306,7 @@ export function calculateShadowMoisture({trail = {}, historicalHourly = {}, fore
     calculatedAt: new Date(now).toISOString(),
     shadowOnly: true,
     wetnessScore,
+    moistureWetnessScore,
     rideability,
     status,
     readyAt,
@@ -253,6 +322,8 @@ export function calculateShadowMoisture({trail = {}, historicalHourly = {}, fore
     rainBalance: reconciliation.rainBalance,
     totalRain14d: Number(events.reduce((sum, event) => sum + event.totalRain, 0).toFixed(3)),
     biggestStorm,
+    dominantStorm,
+    recoveryGate,
     cardStorm
   };
 }

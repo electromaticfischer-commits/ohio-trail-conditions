@@ -21,7 +21,7 @@ assert(westVirginia.every(trail => trail.official && Number.isFinite(trail.lengt
 assert(westVirginia.every(trail => profiles[trail.id]), 'WV soil profile missing');
 assert(westVirginia.filter(trail => profiles[trail.id].confidence === 'Low').every(trail => profiles[trail.id].samplingMethod), 'Low-confidence soil must expose its sampling method');
 assert(html.includes('id="stateFilter"'), 'State filter missing');
-assert(html.includes('v81.2'), 'Visible current version missing');
+assert(html.includes('v82.0'), 'Visible current version missing');
 assert(html.includes('assets/crust-logo.png'), 'CRUST logo missing');
 assert(source.includes('p_east:-77.5'), 'West Virginia catalog bounds missing');
 assert(source.includes("state==='all'||r.stateCode===state"), 'State filtering is not applied');

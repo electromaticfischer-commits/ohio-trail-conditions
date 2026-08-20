@@ -942,7 +942,7 @@ function modelAssessment(r){
   if(r.moistureModel==='v80'&&r.shadowModel){
     const shadow=r.shadowModel;
     const surface=Number(shadow.surfaceMoisture)||0,subsurface=Number(shadow.subsurfaceSaturation)||0;
-    const biggest=shadow.cardStorm||shadow.biggestStorm||{};
+    const biggest=shadow.dominantStorm||shadow.cardStorm||shadow.biggestStorm||{};
     const endedAt=new Date(biggest.endedAt||0).getTime();
     const ageHours=Number.isFinite(endedAt)&&endedAt>0?Math.max(0,(Date.now()-endedAt)/3600000):null;
     const storm=Number(biggest.totalRain)>=.5

@@ -9,10 +9,10 @@ const logo=path.join(root,'assets','crust-logo.png');
 
 assert(fs.existsSync(logo),'Supplied CRUST logo asset is missing');
 assert(fs.statSync(logo).size>100000,'CRUST logo asset appears incomplete');
-assert(html.includes('assets/crust-logo.png?v=81.2'),'Header does not reference the V81.2 logo');
+assert(html.includes('assets/crust-logo.png?v=82.0'),'Header does not reference the V82.0 logo');
 assert(html.includes('alt="CRUST — Chasing perfect dirt."'),'Updated logo description is missing');
-assert(html.includes('<span>v81.2</span>'),'Visible V81.2 version missing');
+assert(html.includes('<span>v82.0</span>'),'Visible V82.0 version missing');
 assert(css.includes('height:100px;max-width:56vw'),'Desktop logo sizing is missing');
 assert(css.includes('height:74px;max-width:78vw'),'Mobile logo sizing is missing');
 
-console.log('V81.2 logo tests passed.');
+console.log('V82.0 logo tests passed.');

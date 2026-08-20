@@ -910,3 +910,23 @@ Baseline: the published V81.1 CRUST site.
 - Replaces the header artwork with the supplied CRUST logo and “Chasing perfect dirt” tagline.
 - Keeps the header compact at desktop and phone widths despite the new artwork's taller proportions.
 - Does not change rainfall, weather, rideability, readiness, trail data, maps, or community reports.
+
+# V82.0 — Global rainfall-recovery floor
+
+Baseline: the published V81.2 CRUST site.
+
+- Adds a global recovery floor after meaningful rain instead of allowing a trail to become ready as soon as its moisture score barely crosses the threshold.
+- Uses 24 hours as the starting guideline at one-half inch, with smaller and larger rainfall tiers.
+- Accounts for repeated rainfall within 72 hours, trail-specific drainage, canopy and sensitivity, plus the next 24 hours of forecast drying weather.
+- Continues to require six consecutive forecast hours below every rideable moisture threshold.
+- Makes the card explanation identify the storm contributing the most moisture now instead of simply selecting the largest storm in 14 days.
+- Does not change NOAA rainfall retrieval, rainfall totals, rideability scores, trail data, maps, or community reports.
+
+V82.0 verification:
+
+- A Bailey-like regression changed the erroneous one-hour estimate to approximately 23 hours under humid, low-wind drying conditions.
+- A half-inch event begins with the 24-hour guideline and cannot be reduced below 18 hours, even under unusually favorable drying weather.
+- All 339 active trails across six states recalculated with `v82-active-1`; no readiness estimate preceded its recovery floor and no trail remained green during an active recovery hold.
+- The live Bailey snapshot changed to `Use caution`, 59% rideability, with readiness at 6:00 AM EDT on August 21 after an 18-hour adjusted recovery period.
+- Live NOAA MRMS checks at Columbus, Cleveland and Cincinnati returned numeric, monotonic 12/24/48/72-hour totals at product time `2026-08-20T19:00:00Z`.
+- Rainfall safeguards, raster selection, storm recovery, catalog synchronization, community retention, card cleanup, inline-script parity and ZIP integrity checks passed.
