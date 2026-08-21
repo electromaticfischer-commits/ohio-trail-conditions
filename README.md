@@ -930,3 +930,12 @@ V82.0 verification:
 - The live Bailey snapshot changed to `Use caution`, 59% rideability, with readiness at 6:00 AM EDT on August 21 after an 18-hour adjusted recovery period.
 - Live NOAA MRMS checks at Columbus, Cleveland and Cincinnati returned numeric, monotonic 12/24/48/72-hour totals at product time `2026-08-20T19:00:00Z`.
 - Rainfall safeguards, raster selection, storm recovery, catalog synchronization, community retention, card cleanup, inline-script parity and ZIP integrity checks passed.
+
+# V82.1 — Rolling-rainfall recovery consistency
+
+Baseline: the published V82.0 CRUST site.
+
+- Prevents a legitimate 72-hour NOAA decrease from being rejected when the decrease is explained by rain aging out of the previous 48–72-hour band.
+- When the last trustworthy NOAA snapshot must be held, uses those held NOAA totals consistently in both the visible rainfall tiles and moisture calculation.
+- Raises the normal recovery starting point for a 0.25–0.49-inch event from 12 to 18 hours, with a 13.5-hour minimum after favorable-weather adjustment.
+- Adds the exact Bailey rollover/fallback failure as a permanent regression case.

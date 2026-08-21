@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="css/styles.css?v=80-shadow">
 </head>
 <body>
-<header><div class="header-inner"><div class="brand-lockup"><h1><img class="brand-logo" src="assets/crust-logo.png?v=82.0" alt="CRUST — Chasing perfect dirt."></h1></div><div class="header-updated">Conditions refreshed <span id="updated">–</span></div></div></header>
+<header><div class="header-inner"><div class="brand-lockup"><h1><img class="brand-logo" src="assets/crust-logo.png?v=82.1" alt="CRUST — Chasing perfect dirt."></h1></div><div class="header-updated">Conditions refreshed <span id="updated">–</span></div></div></header>
 <main>
 <div id="pickBanner" class="pick-banner" aria-live="polite">
   <div><strong id="pickBannerTitle">Choose a location</strong><span>Click anywhere on the map. Press Esc or Cancel to stop.</span></div>
@@ -26,7 +26,7 @@
 </div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading nearby trails…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v82.0</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v82.1</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="adminLoginDialog" class="login-dialog">
 <div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
@@ -644,7 +644,9 @@ function abruptMrmsDrop(current,cached){
   const old72=Number(cached.r72)||0,new72=Number(current.r72)||0;
   if(old72<MRMS_MIN_STORM_TOTAL)return false;
   const allowedRatio=age<=6*3600000?.55:age<=12*3600000?.35:.20;
-  return new72<old72*allowedRatio && old72-new72>.15;
+  const expiringTail=Math.max(0,old72-(Number(cached.r48)||0));
+  const unexplainedDrop=Math.max(0,old72-new72-expiringTail);
+  return new72<old72*allowedRatio&&unexplainedDrop>.15;
 }
 function sourceDisagreement(mrms,openMeteo){
   const a=Number(mrms?.r72)||0,b=Number(openMeteo?.r72)||0;

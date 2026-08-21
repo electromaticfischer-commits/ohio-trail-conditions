@@ -486,7 +486,9 @@ function abruptDrop(current: Rainfall, cached: Rainfall | null, previousAt?: str
   const new72 = Number(current.r72) || 0;
   if (old72 < MIN_STORM_TOTAL) return false;
   const allowedRatio = age <= 6 * 3600000 ? 0.55 : age <= 12 * 3600000 ? 0.35 : 0.20;
-  return new72 < old72 * allowedRatio && old72 - new72 > 0.15;
+  const expiringTail = Math.max(0, old72 - (Number(cached.r48) || 0));
+  const unexplainedDrop = Math.max(0, old72 - new72 - expiringTail);
+  return new72 < old72 * allowedRatio && unexplainedDrop > 0.15;
 }
 
 function disagreement(a: Rainfall, b: Rainfall) {
@@ -656,7 +658,9 @@ function buildResult(
     historicalHourly: historicalHourly || liveHourly,
     forecastHourly: liveHourly,
     authoritativeRainfall: rainfall,
-    rainQuality: quality
+    // A held NOAA snapshot remains authoritative rainfall for moisture
+    // reconciliation even though the public snapshot is marked fallback.
+    rainQuality: quality === 'trusted' || rainSource === 'Last trustworthy NOAA MRMS reading' ? 'trusted' : quality
   });
   return {
     quality,

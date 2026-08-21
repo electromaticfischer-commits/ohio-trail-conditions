@@ -1,4 +1,4 @@
-export const MOISTURE_MODEL_VERSION = 'v82-active-1';
+export const MOISTURE_MODEL_VERSION = 'v82-active-2';
 
 const HOUR_MS = 3600000;
 const RAIN_THRESHOLD = 0.005;
@@ -204,7 +204,7 @@ function rainfallRecoveryGate(events, hydrology, forecastHourly, recentRain72, n
     : latestTotal >= 2 ? 48
     : latestTotal >= 1 ? 36
     : latestTotal >= .5 ? 24
-    : latestTotal >= .25 ? 12
+    : latestTotal >= .25 ? 18
     : 6;
   // Repeated storms keep the recovery clock meaningful even when the newest
   // shower is smaller than the rain that established the saturated baseline.

@@ -111,6 +111,19 @@ assert(favorableHalfInch.recoveryGate.adjustedHours>=18,'Even unusually favorabl
 assert.notEqual(favorableHalfInch.status.key,'green','An active rainfall recovery hold must not display a green condition');
 assert(favorableHalfInch.rideability<=76,'An active rainfall recovery hold must cap the public score at caution');
 
+const baileysRollover=calculateShadowMoisture({
+  trail:baileys,
+  historicalHourly:hourlyWith(spreadStorm(.032,-2,2),{humidity:84,wind:4,solar:180,evap:.002,vpd:.4}),
+  forecastHourly:hourlyWith([],{humidity:84,wind:4,solar:180,evap:.002,vpd:.4}),
+  authoritativeRainfall:{r12:.35,r24:.36,r48:.36,r72:.36},
+  rainQuality:'trusted',
+  now
+});
+assert.equal(baileysRollover.rainBalance.allocated72,.36,'The active model must retain the NOAA total rather than the smaller timing-source total');
+assert.equal(baileysRollover.recoveryGate.baseHours,18,'A 0.25–0.49-inch event must begin with an 18-hour recovery guideline');
+assert(baileysRollover.recoveryGate.adjustedHours>=13.5,'Favorable conditions must not reduce a moderate event below the 13.5-hour floor');
+assert.notEqual(baileysRollover.status.key,'green','A Bailey-like moderate event must not turn green during its recovery hold');
+
 const source=fs.readFileSync(path.join(root,'js','app.js'),'utf8');
 const edge=fs.readFileSync(path.join(root,'supabase','functions','weather-refresh','index.ts'),'utf8');
 const sql=fs.readFileSync(path.join(root,'supabase','v80-shadow-moisture-model.sql'),'utf8');

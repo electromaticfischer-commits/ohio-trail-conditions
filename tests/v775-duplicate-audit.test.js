@@ -10,7 +10,7 @@ const trails = JSON.parse(source.match(/^const baseTrails=(.+);$/m)[1]);
 const inline = html.match(/<script>([\s\S]*?)<\/script>/)[1].trim();
 
 assert.strictEqual(inline, source.trim(), 'Inline application script must match js/app.js');
-assert(html.includes('<span>v82.0</span>'), 'Visible current version missing');
+assert(html.includes('<span>v82.1</span>'), 'Visible current version missing');
 assert(!html.includes('leaflet.markercluster'), 'Numbered marker clustering returned');
 assert(trails.some(trail => trail.id === 'alum-p1' && trail.name === 'Alum Creek Phase 1'), 'Alum Creek Phase 1 is missing');
 assert(trails.some(trail => trail.id === 'alum-p2' && trail.name === 'Alum Creek Phase 2'), 'Alum Creek Phase 2 is missing');

@@ -547,7 +547,9 @@ function abruptMrmsDrop(current,cached){
   const old72=Number(cached.r72)||0,new72=Number(current.r72)||0;
   if(old72<MRMS_MIN_STORM_TOTAL)return false;
   const allowedRatio=age<=6*3600000?.55:age<=12*3600000?.35:.20;
-  return new72<old72*allowedRatio && old72-new72>.15;
+  const expiringTail=Math.max(0,old72-(Number(cached.r48)||0));
+  const unexplainedDrop=Math.max(0,old72-new72-expiringTail);
+  return new72<old72*allowedRatio&&unexplainedDrop>.15;
 }
 function sourceDisagreement(mrms,openMeteo){
   const a=Number(mrms?.r72)||0,b=Number(openMeteo?.r72)||0;
