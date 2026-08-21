@@ -21,7 +21,7 @@ assert(pennsylvania.every(trail => /route|riding-area/.test(profiles[trail.id].s
 assert(pennsylvania.filter(trail => profiles[trail.id].confidence === 'Low').every(trail => profiles[trail.id].sampleCoverage), 'Low-confidence soil must expose sample coverage');
 
 assert(html.includes('<option value="PA">Pennsylvania</option>'), 'Pennsylvania state filter missing');
-assert(html.includes('<span>v82.1</span>'), 'Visible current version missing');
+assert(html.includes('<span>v82.2</span>'), 'Visible current version missing');
 assert(source.includes('p_east:-74.5'), 'Pennsylvania catalog boundary missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 assert(!source.includes('Mapped trail length:'), 'Trail length display returned');

@@ -6,7 +6,7 @@
 <title>CRUST | Mountain Bike Trail Conditions</title>
 <meta name="theme-color" content="#151515">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="css/styles.css?v=80-shadow">
+<link rel="stylesheet" href="css/styles.css?v=82.2">
 </head>
 <body>
 <header><div class="header-inner"><div class="brand-lockup"><h1><img class="brand-logo" src="assets/crust-logo.png?v=82.1" alt="CRUST — Chasing perfect dirt."></h1></div><div class="header-updated">Conditions refreshed <span id="updated">–</span></div></div></header>
@@ -26,7 +26,8 @@
 </div>
 <div class="layout"><div class="mapwrap"><div id="map"></div></div><section><div id="trailList" class="trail-list"><div class="loading">Loading nearby trails…</div></div></section></div>
 </main>
-<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v82.1</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
+<button id="backToTop" class="back-to-top" type="button" aria-label="Back to top" hidden>↑ Top</button>
+<footer><span>Weather: NOAA MRMS with Open-Meteo comparison. Predictions are advisory.</span><span class="footer-tools"><span>v82.2</span><button id="developerMode" class="developer-link" type="button" aria-pressed="false">Developer</button></span></footer>
 
 <dialog id="adminLoginDialog" class="login-dialog">
 <div class="modal-head"><h2>Developer sign in</h2><button id="closeAdminLogin" type="button">Close</button></div>
@@ -1734,6 +1735,17 @@ document.getElementById('adminSignOut').addEventListener('click',async()=>{await
 updateDeveloperUI();
 document.getElementById('manage').onclick=()=>{clearPickState(true);renderAdmin();updateLocationStatus();const d=document.getElementById('trailDialog');if(!d.open)d.showModal()};document.getElementById('adminSearch')?.addEventListener('input',renderAdmin);document.getElementById('closeDialog').onclick=()=>{clearPickState(true);document.getElementById('trailDialog').close();resetForm()};document.getElementById('trailForm').onsubmit=saveTrail;document.getElementById('resetForm').onclick=resetForm;document.getElementById('pickAccessOnMap').onclick=()=>beginPickMode('access');document.getElementById('pickWeatherOnMap').onclick=()=>beginPickMode('weather');document.getElementById('copyAccessToWeather').onclick=copyAccessToWeather;document.getElementById('cancelPick').onclick=()=>{clearPickState(false);const d=document.getElementById('trailDialog');if(!d.open)d.showModal()};document.getElementById('exportTrails').onclick=exportData;document.getElementById('importTrails').onchange=e=>{const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);customTrails=Array.isArray(d.customTrails)?d.customTrails.map(stripGuessedSoil):[];hiddenTrailIds=Array.isArray(d.hiddenTrailIds)?d.hiddenTrailIds:[];deletedTrailIds=Array.isArray(d.deletedTrailIds)?d.deletedTrailIds:[];builtInOverrides=d.builtInOverrides&&typeof d.builtInOverrides==='object'?Object.fromEntries(Object.entries(d.builtInOverrides).map(([id,trail])=>[id,stripGuessedSoil(trail)])):{};localStorage.setItem('customTrails',JSON.stringify(customTrails));localStorage.setItem('hiddenTrailIds',JSON.stringify(hiddenTrailIds));localStorage.setItem('deletedTrailIds',JSON.stringify(deletedTrailIds));localStorage.setItem('builtInOverrides',JSON.stringify(builtInOverrides));load();alert('Trail edits imported.')}catch(err){alert('That file could not be imported.')}};reader.readAsText(f)};
 document.getElementById('trailDialog').addEventListener('cancel',()=>{clearPickState(true);resetForm()});
+const backToTop=document.getElementById('backToTop');
+function updateBackToTop(){
+ backToTop.hidden=window.innerWidth>700||window.scrollY<=Math.max(600,window.innerHeight*.9);
+}
+backToTop.addEventListener('click',()=>{
+ const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ window.scrollTo({top:0,behavior:reduceMotion?'auto':'smooth'});
+});
+window.addEventListener('scroll',updateBackToTop,{passive:true});
+window.addEventListener('resize',updateBackToTop);
+updateBackToTop();
 verifyAdminSession();
 load().then(reuseGrantedLocation);
 </script>

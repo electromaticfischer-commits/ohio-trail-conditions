@@ -939,3 +939,12 @@ Baseline: the published V82.0 CRUST site.
 - When the last trustworthy NOAA snapshot must be held, uses those held NOAA totals consistently in both the visible rainfall tiles and moisture calculation.
 - Raises the normal recovery starting point for a 0.25–0.49-inch event from 12 to 18 hours, with a 13.5-hour minimum after favorable-weather adjustment.
 - Adds the exact Bailey rollover/fallback failure as a permanent regression case.
+
+# V82.2 — Mobile back-to-top control
+
+Baseline: the published V82.1 CRUST site.
+
+- Adds a mobile-only floating `↑ Top` button after the rider scrolls beyond approximately one screen.
+- Returns smoothly to the map and filters, while respecting reduced-motion preferences.
+- Keeps the control above the phone safe area and hides it automatically near the top or on larger screens.
+- Does not change rainfall, rideability, readiness, trail data, map behavior, or community reports.

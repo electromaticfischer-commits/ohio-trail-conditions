@@ -230,3 +230,7 @@ dialog{background:#fff;color:var(--text);border-color:var(--line)}
 .footer-tools,.developer-link,footer{color:#59645c}
 .developer-link.is-active{color:var(--brand)}
 .badge.yellow{color:#2a2400!important}
+.back-to-top{display:none;position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:1000;min-width:68px;min-height:48px;padding:10px 16px;border:2px solid #fff;border-radius:999px;background:var(--brand);color:#fff;font-weight:800;line-height:1;box-shadow:none}
+.back-to-top:hover,.back-to-top:focus-visible{background:#1c6536;border-color:#fff;color:#fff}
+@media(max-width:700px){.back-to-top:not([hidden]){display:inline-flex;align-items:center;justify-content:center}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}

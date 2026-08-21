@@ -22,7 +22,7 @@ assert(!trails.some(trail => trail.id === 'starhill-mrwzkfre'), 'Duplicate Starh
 assert(source.includes(`const RETIRED_CATALOG_IDS=['${blockedShared.join("','")}']`), 'Shared retirement and duplicate guard is incomplete');
 assert.strictEqual(new Set(trails.map(trail => trail.id)).size, trails.length, 'Packaged IDs must remain unique');
 assert.strictEqual(audit.mathChanged, false, 'Catalog sync must not change condition math');
-assert(html.includes('<span>v82.1</span>'), 'Visible current version missing');
+assert(html.includes('<span>v82.2</span>'), 'Visible current version missing');
 assert.strictEqual(inline, source.trim(), 'Inline application script does not match js/app.js');
 
 console.log('V76.1 packaged catalog sync tests passed.');

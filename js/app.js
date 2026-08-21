@@ -1637,5 +1637,16 @@ document.getElementById('adminSignOut').addEventListener('click',async()=>{await
 updateDeveloperUI();
 document.getElementById('manage').onclick=()=>{clearPickState(true);renderAdmin();updateLocationStatus();const d=document.getElementById('trailDialog');if(!d.open)d.showModal()};document.getElementById('adminSearch')?.addEventListener('input',renderAdmin);document.getElementById('closeDialog').onclick=()=>{clearPickState(true);document.getElementById('trailDialog').close();resetForm()};document.getElementById('trailForm').onsubmit=saveTrail;document.getElementById('resetForm').onclick=resetForm;document.getElementById('pickAccessOnMap').onclick=()=>beginPickMode('access');document.getElementById('pickWeatherOnMap').onclick=()=>beginPickMode('weather');document.getElementById('copyAccessToWeather').onclick=copyAccessToWeather;document.getElementById('cancelPick').onclick=()=>{clearPickState(false);const d=document.getElementById('trailDialog');if(!d.open)d.showModal()};document.getElementById('exportTrails').onclick=exportData;document.getElementById('importTrails').onchange=e=>{const f=e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const d=JSON.parse(reader.result);customTrails=Array.isArray(d.customTrails)?d.customTrails.map(stripGuessedSoil):[];hiddenTrailIds=Array.isArray(d.hiddenTrailIds)?d.hiddenTrailIds:[];deletedTrailIds=Array.isArray(d.deletedTrailIds)?d.deletedTrailIds:[];builtInOverrides=d.builtInOverrides&&typeof d.builtInOverrides==='object'?Object.fromEntries(Object.entries(d.builtInOverrides).map(([id,trail])=>[id,stripGuessedSoil(trail)])):{};localStorage.setItem('customTrails',JSON.stringify(customTrails));localStorage.setItem('hiddenTrailIds',JSON.stringify(hiddenTrailIds));localStorage.setItem('deletedTrailIds',JSON.stringify(deletedTrailIds));localStorage.setItem('builtInOverrides',JSON.stringify(builtInOverrides));load();alert('Trail edits imported.')}catch(err){alert('That file could not be imported.')}};reader.readAsText(f)};
 document.getElementById('trailDialog').addEventListener('cancel',()=>{clearPickState(true);resetForm()});
+const backToTop=document.getElementById('backToTop');
+function updateBackToTop(){
+ backToTop.hidden=window.innerWidth>700||window.scrollY<=Math.max(600,window.innerHeight*.9);
+}
+backToTop.addEventListener('click',()=>{
+ const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ window.scrollTo({top:0,behavior:reduceMotion?'auto':'smooth'});
+});
+window.addEventListener('scroll',updateBackToTop,{passive:true});
+window.addEventListener('resize',updateBackToTop);
+updateBackToTop();
 verifyAdminSession();
 load().then(reuseGrantedLocation);
